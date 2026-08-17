@@ -121,6 +121,11 @@ class AgentLoop:
                 state.iteration += 1
                 logger.debug(f"=== Iteration {state.iteration}/{state.max_iterations} ===")
 
+                # 事务快照：本轮追加的 "assistant(tool_calls) + 全部 tool 结果" 是一个事务单元。
+                # 若中途异常，回滚到快照，保证重试时消息序列仍满足
+                # OpenAI 协议（每个 tool_call 必须有对应的 tool 消息）
+                messages_snapshot_len = len(messages)
+
                 try:
                     # 调用 LLM（可能返回 tool_calls）
                     llm_response: LLMResponse = await agent.llm_client.chat_with_tools(
@@ -169,30 +174,41 @@ class AgentLoop:
                             self.tool_call_count += 1
                             logger.debug(f"Executing: {tool_call.name}({tool_call.arguments}) - 第 {self.tool_call_count} 次调用")
 
-                            # Harness Engineering: 验证调用
-                            if self.validator:
-                                validation_result = self.validator.validate_tool_call(
-                                    agent.agent_id,
-                                    tool_call.name
-                                )
-                                if not validation_result.get("valid"):
-                                    logger.warning(
-                                        f"⚠️ 约束警告: {validation_result.get('reason')}"
+                            try:
+                                # Harness Engineering: 验证调用
+                                if self.validator:
+                                    validation_result = self.validator.validate_tool_call(
+                                        agent.agent_id,
+                                        tool_call.name
                                     )
+                                    if not validation_result.get("valid"):
+                                        logger.warning(
+                                            f"⚠️ 约束警告: {validation_result.get('reason')}"
+                                        )
 
-                            tool_result = await agent.execute_tool(
-                                tool_name=tool_call.name,
-                                arguments=tool_call.arguments
-                            )
+                                tool_result = await agent.execute_tool(
+                                    tool_name=tool_call.name,
+                                    arguments=tool_call.arguments
+                                )
 
-                            # 添加结果消息
-                            messages.append(
-                                agent.llm_client.create_tool_message(
+                                tool_message = agent.llm_client.create_tool_message(
                                     tool_call_id=tool_call.id,
                                     tool_name=tool_call.name,
                                     result=tool_result
                                 )
-                            )
+                            except Exception as tool_error:
+                                # Skill 执行/结果序列化失败也必须回填一条 tool 消息，
+                                # 否则 assistant(tool_calls) 缺少对应 tool 消息，
+                                # 下一次 LLM 请求会被 API 以协议违规拒绝（400）
+                                logger.error(f"Tool execution failed: {tool_call.name} - {tool_error}")
+                                tool_message = agent.llm_client.create_tool_message(
+                                    tool_call_id=tool_call.id,
+                                    tool_name=tool_call.name,
+                                    result={"success": False, "error": str(tool_error)}
+                                )
+
+                            # 添加结果消息
+                            messages.append(tool_message)
 
                         # 继续下一轮循环
                         continue
@@ -249,10 +265,19 @@ class AgentLoop:
 
                 except Exception as e:
                     logger.error(f"Error in iteration {state.iteration}: {e}")
+                    # 事务回滚：丢弃本轮追加的不完整消息
+                    # （如 assistant(tool_calls) 已入列但 tool 结果缺失），
+                    # 使重试携带的消息序列恢复为合法状态
+                    if len(messages) > messages_snapshot_len:
+                        rollback_count = len(messages) - messages_snapshot_len
+                        del messages[messages_snapshot_len:]
+                        logger.warning(
+                            f"Rolled back {rollback_count} partial message(s) from failed iteration"
+                        )
                     if state.iteration >= state.max_iterations:
                         state.mark_failed(str(e))
                         break
-                    # 否则继续尝试
+                    # 否则继续尝试（消息序列已恢复一致性）
 
             # 如果达到最大迭代次数但没有完成
             if not state.is_completed():
