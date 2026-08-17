@@ -123,7 +123,8 @@ class MemoryEntropyManager:
         if not memories:
             return []
 
-        max_age_days = max_age_days or self.max_age_days
+        # 注意：不能用 `or`，否则 max_age_days=0 会被短路成默认值
+        max_age_days = max_age_days if max_age_days is not None else self.max_age_days
         cutoff_date = datetime.now() - timedelta(days=max_age_days)
 
         cleaned = []

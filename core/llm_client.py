@@ -81,8 +81,9 @@ class LLMClient:
             模型返回的文本
         """
         try:
-            temperature = temperature or self.temperature
-            max_tokens = max_tokens or self.max_tokens
+            # 注意：不能用 `or`，否则 temperature=0 / max_tokens=0 会被短路成默认值
+            temperature = temperature if temperature is not None else self.temperature
+            max_tokens = max_tokens if max_tokens is not None else self.max_tokens
 
             logger.debug(f"Calling LLM ({self.model_type}) with {len(messages)} messages")
 
@@ -163,8 +164,9 @@ class LLMClient:
             LLMResponse 对象
         """
         try:
-            temperature = temperature or self.temperature
-            max_tokens = max_tokens or self.max_tokens
+            # 注意：不能用 `or`，否则 temperature=0 / max_tokens=0 会被短路成默认值
+            temperature = temperature if temperature is not None else self.temperature
+            max_tokens = max_tokens if max_tokens is not None else self.max_tokens
 
             logger.debug(f"Calling LLM with {len(tools) if tools else 0} tools")
 
