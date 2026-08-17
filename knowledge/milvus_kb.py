@@ -240,7 +240,9 @@ class MedicalKnowledgeBase:
                         "id": hit["id"],
                         "content": hit["entity"]["content"],
                         "metadata": json.loads(hit["entity"]["metadata"]),
-                        "score": 1 - hit["distance"]  # 转换为相似度分数
+                        # MilvusClient 在 metric_type="COSINE" 下返回的 distance 本身就是
+                        # 余弦相似度（越大越相关），直接作为 score，不能做 1-x 反转
+                        "score": hit["distance"]
                     })
                 except Exception as e:
                     logger.warning(f"Failed to parse result: {e}")
