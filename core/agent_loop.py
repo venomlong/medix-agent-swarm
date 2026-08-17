@@ -96,12 +96,18 @@ class AgentLoop:
             messages = self._initialize_messages(agent, input_data, session_id)
 
             # 记录用户消息到短期记忆
+            # 注意：只存原始用户问题，不存格式化后的完整 prompt（含系统信息/背景信息前缀）。
+            # 否则下一轮取历史时，历史里会嵌着上一轮的历史，指数级套娃
             if should_record:
-                user_message = messages[-1]["content"] if messages else str(input_data)
+                raw_question = (
+                    input_data.get('question')
+                    or input_data.get('query')
+                    or (messages[-1]["content"] if messages else str(input_data))
+                )
                 self.short_term_memory.add_message(
                     session_id=session_id,
                     role="user",
-                    content=user_message
+                    content=raw_question
                 )
                 logger.debug(f"Recorded user message to short-term memory (session={session_id})")
 
@@ -154,14 +160,8 @@ class AgentLoop:
                         # 添加 assistant 消息（包含 tool_calls）
                         messages.append(self._create_assistant_message_with_tools(llm_response))
 
-                        # 记录 assistant 消息到短期记忆
-                        if should_record:
-                            tool_names = [tc.name for tc in llm_response.tool_calls]
-                            self.short_term_memory.add_message(
-                                session_id=session_id,
-                                role="assistant",
-                                content=f"调用工具：{', '.join(tool_names)}"
-                            )
+                        # 注意：中间的工具调用过程不写入短期记忆——
+                        # 记忆协议：只存原始用户问题和最终答案（记忆存的是语义事实，不是 prompt 工件）
 
                         # 执行每个 Skill 调用
                         for tool_call in llm_response.tool_calls:
@@ -193,15 +193,6 @@ class AgentLoop:
                                     result=tool_result
                                 )
                             )
-
-                            # 记录结果到短期记忆
-                            if should_record:
-                                result_summary = str(tool_result)[:200]
-                                self.short_term_memory.add_message(
-                                    session_id=session_id,
-                                    role="tool",
-                                    content=f"{tool_call.name}: {result_summary}"
-                                )
 
                         # 继续下一轮循环
                         continue

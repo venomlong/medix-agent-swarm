@@ -106,28 +106,17 @@ class SwarmCoordinator:
         logger.info(f"Processing question (session={session_id}): {question[:50]}...")
 
         # ===== 统一的记忆检索（所有模式都使用）=====
-        # 1. 检索短期记忆（当前会话历史）
-        recent_history = self.short_term_memory.get_recent_messages(
-            session_id=session_id,
-            limit=10  # 最近5轮对话（10条消息）
-        )
-
-        # 2. 检索长期记忆（相似历史会话）
+        # 1. 检索长期记忆（相似历史会话）
+        # 注意：短期记忆（当前会话历史）不放进 context——
+        # AgentLoop 会通过 get_history() 把历史作为独立 messages 注入一次，
+        # 若再塞进 context 会导致同一份历史进两次 prompt（且是 dict 字符串形式）
         similar_memories = self.long_term_memory.search_similar_sessions(
             query=question,
             limit=3
         )
 
-        # 3. 构建增强上下文
+        # 2. 构建增强上下文
         enhanced_context = context or {}
-
-        # 添加短期记忆
-        if recent_history:
-            enhanced_context["recent_history"] = [
-                {"role": msg.get("role", ""), "content": msg.get("content", "")}
-                for msg in recent_history
-            ]
-            logger.info(f"Loaded {len(recent_history)} recent messages from short-term memory")
 
         # 添加长期记忆
         if similar_memories:
@@ -256,10 +245,9 @@ class SwarmCoordinator:
 
         这是群体智能的核心流程
 
-        注意：context 已经包含了长短期记忆（在 process() 中注入）
+        注意：context 已经包含了长期记忆 historical_cases（在 process() 中注入）；
+        当前会话历史由 AgentLoop 通过 get_history() 注入 messages，不放进 context
         """
-        # context 已经包含 recent_history 和 historical_cases
-        # 无需重复检索
 
         # 创建 SharedContext
         shared_context = SharedContext(session_id=session_id)
