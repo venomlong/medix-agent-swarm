@@ -120,11 +120,18 @@ class BaseAgent(ABC):
         """
         return await self.run_loop(input_data)
 
-    async def run_loop(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """运行 Agent Loop"""
+    async def run_loop(self, input_data: Dict[str, Any], record_memory: bool = True) -> Dict[str, Any]:
+        """运行 Agent Loop
+
+        Args:
+            input_data: 输入数据
+            record_memory: 是否由 AgentLoop 写入短期记忆
+                （Swarm 模式下应为 False，由 Coordinator 统一写入，
+                避免多个 Worker 各自写入交错的中间消息）
+        """
         # 提取session_id（如果有）
         session_id = input_data.get('session_id')
-        return await self.loop.run(self, input_data, session_id=session_id)
+        return await self.loop.run(self, input_data, session_id=session_id, record_memory=record_memory)
 
     # ===== Swarm 协作能力 =====
 
@@ -158,4 +165,11 @@ class BaseAgent(ABC):
             'subtask_type': subtask.type
         }
 
-        return await self.run_loop(input_data)
+        # 透传 session_id（来自 SharedContext），让 AgentLoop 能读取本会话历史；
+        # 否则 Swarm 路径下 session_id 恒为 None，短期记忆逻辑全部被跳过
+        if self.shared_context is not None and getattr(self.shared_context, 'session_id', None):
+            input_data['session_id'] = self.shared_context.session_id
+
+        # record_memory=False：Swarm 模式下由 Coordinator 统一写入
+        # "user 问题 + 最终综合答案"，Worker 不写各自的中间消息
+        return await self.run_loop(input_data, record_memory=False)

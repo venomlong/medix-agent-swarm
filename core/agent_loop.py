@@ -53,13 +53,22 @@ class AgentLoop:
         if CONSTRAINTS_ENABLED:
             logger.debug("✅ Constraint validation enabled")
 
-    async def run(self, agent, input_data: Dict[str, Any], session_id: Optional[str] = None) -> Dict[str, Any]:
+    async def run(
+        self,
+        agent,
+        input_data: Dict[str, Any],
+        session_id: Optional[str] = None,
+        record_memory: bool = True
+    ) -> Dict[str, Any]:
         """
         执行Agent循环
 
         Args:
             agent: Agent实例
             input_data: 输入数据
+            session_id: 会话ID（用于读取/写入短期记忆）
+            record_memory: 是否写入短期记忆。Swarm 模式下 Worker 传 False
+                （读历史仍然生效），写入由 Coordinator 统一完成
 
         Returns:
             最终结果
@@ -77,6 +86,9 @@ class AgentLoop:
 
         logger.info(f"Starting Agent Loop for {agent.agent_id}, task_id={task_id}")
 
+        # 是否由本 Loop 写入短期记忆（读取不受此开关影响）
+        should_record = bool(self.short_term_memory and session_id and record_memory)
+
         try:
             state.status = TaskStatus.IN_PROGRESS
 
@@ -84,7 +96,7 @@ class AgentLoop:
             messages = self._initialize_messages(agent, input_data, session_id)
 
             # 记录用户消息到短期记忆
-            if self.short_term_memory and session_id:
+            if should_record:
                 user_message = messages[-1]["content"] if messages else str(input_data)
                 self.short_term_memory.add_message(
                     session_id=session_id,
@@ -143,7 +155,7 @@ class AgentLoop:
                         messages.append(self._create_assistant_message_with_tools(llm_response))
 
                         # 记录 assistant 消息到短期记忆
-                        if self.short_term_memory and session_id:
+                        if should_record:
                             tool_names = [tc.name for tc in llm_response.tool_calls]
                             self.short_term_memory.add_message(
                                 session_id=session_id,
@@ -183,7 +195,7 @@ class AgentLoop:
                             )
 
                             # 记录结果到短期记忆
-                            if self.short_term_memory and session_id:
+                            if should_record:
                                 result_summary = str(tool_result)[:200]
                                 self.short_term_memory.add_message(
                                     session_id=session_id,
@@ -223,7 +235,7 @@ class AgentLoop:
                                         final_answer = fixed_answer
 
                         # 记录最终回答到短期记忆
-                        if self.short_term_memory and session_id:
+                        if should_record:
                             self.short_term_memory.add_message(
                                 session_id=session_id,
                                 role="assistant",
@@ -279,7 +291,7 @@ class AgentLoop:
                     }
 
                     # 记录最终回答到短期记忆
-                    if self.short_term_memory and session_id:
+                    if should_record:
                         self.short_term_memory.add_message(
                             session_id=session_id,
                             role="assistant",

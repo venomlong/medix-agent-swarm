@@ -334,8 +334,23 @@ class SwarmCoordinator:
         except Exception as e:
             logger.error(f"Failed to generate session summary: {e}")
 
-        # 注意：短期记忆已经在 Agent Loop 中保存了，这里不需要重复保存
-        # Agent Loop 保存了完整的对话历史（user + assistant + tool messages）
+        # Swarm 模式由 Coordinator 统一写入短期记忆：一条原始 user 问题 + 一条最终综合答案。
+        # Worker 的 AgentLoop 以 record_memory=False 运行（只读历史不写入），
+        # 避免 3 个 Worker 各自写入交错的中间工具调用流水
+        try:
+            self.short_term_memory.add_message(
+                session_id=session_id,
+                role="user",
+                content=question
+            )
+            self.short_term_memory.add_message(
+                session_id=session_id,
+                role="assistant",
+                content=final_answer
+            )
+            logger.info(f"Saved swarm conversation to short-term memory (session={session_id})")
+        except Exception as e:
+            logger.error(f"Failed to save to short-term memory: {e}")
 
         # 保存到 Mem0 长期记忆
         try:
