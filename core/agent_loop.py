@@ -116,6 +116,10 @@ class AgentLoop:
 
             logger.debug(f"Agent has {len(tools_openai_format) if tools_openai_format else 0} skills available")
 
+            # 达到工具调用上限后置为 True：下一轮以 tool_choice="none" 调用，
+            # 从协议上禁止 LLM 继续返回 tool_calls（否则可能空转到 max_iterations）
+            force_final_answer = False
+
             # 主循环：LLM → Skill Calls → Results → LLM
             while state.should_continue():
                 state.iteration += 1
@@ -131,7 +135,7 @@ class AgentLoop:
                     llm_response: LLMResponse = await agent.llm_client.chat_with_tools(
                         messages=messages,
                         tools=tools_openai_format,
-                        tool_choice="auto",
+                        tool_choice="none" if force_final_answer else "auto",
                         temperature=agent.config.get('temperature', 0.7)
                     )
 
@@ -153,7 +157,11 @@ class AgentLoop:
                         # 硬性限制：检查是否已达到最大调用次数
                         if self.tool_call_count >= self.max_tool_calls:
                             logger.warning(f"⚠️ 已达到最大 Skill 调用次数限制 ({self.max_tool_calls})，强制生成最终答案")
-                            # 强制要求 LLM 提供最终答案
+                            # 强制要求 LLM 提供最终答案：
+                            # 仅注入提示词不够——下一轮若仍是 tool_choice="auto"，
+                            # LLM 可再次返回 tool_calls 导致空转；置 force_final_answer
+                            # 使下一轮以 tool_choice="none" 调用，行为确定化
+                            force_final_answer = True
                             messages.append({
                                 'role': 'user',
                                 'content': f'已完成 {self.max_tool_calls} 次信息检索。请基于已获取的信息提供最终答复。'
