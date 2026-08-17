@@ -1,0 +1,64 @@
+# 环境变量
+.env
+
+# 本地敏感配置（可能包含明文 API Key，绝不能提交）
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 记忆数据
+/tmp/qdrant/
+.mem0/
+
+# 向量数据库（可通过 knowledge/scripts/import_hardcoded_data.py 重新生成）
+knowledge/data/milvus_lite.db/
+
+# 运行期生成的会话记录/身份文件（不应提交到仓库）
+memory/agents/*/
+memory/swarm/session_summaries/*/
+!memory/agents/.gitkeep
+!memory/swarm/session_summaries/.gitkeep
+
+# 测试运行日志
+test_run_report.log
