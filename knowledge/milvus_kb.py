@@ -6,7 +6,6 @@
 2. 语义检索
 3. 知识库管理
 
-参考实现：/Users/saintgeo/Desktop/self-learn/shanglv
 """
 import json
 from pathlib import Path

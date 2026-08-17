@@ -238,7 +238,7 @@ medix-agent-swarm/
 - ✅ **Skills 自包含**：每个 Skill 在 `script/` 目录下实现，直接调用知识库
 - ✅ **动态加载**：`skill_loader.py` 扫描 `.claude/skills/` 目录动态加载
 - ✅ **SkillRegistry**：统一管理 Skill 注册、执行、格式转换
-- ✅ **统一配置**：使用上层 `/Users/saintgeo/Desktop/self-learn/swarm/config.py`
+- ✅ **统一配置**：使用项目根目录上层的 `config.py`
 - ✅ **记忆分离**：Agent 身份文件和会话总结分别存储在 `memory/agents/` 和 `memory/swarm/`
 
 ## 🤖 Skills 和 Agent 清单
@@ -291,7 +291,7 @@ medix-agent-swarm/
 
 ## ⚙️ 配置说明
 
-项目使用上层目录的统一配置文件：`/Users/saintgeo/Desktop/self-learn/swarm/config.py`
+项目使用上层目录的统一配置文件：`../config.py`（即 `medix-agent-swarm` 所在目录的上一级）
 
 ### 配置内容
 
@@ -360,7 +360,7 @@ memory.clear()
 
 **配置**：
 ```python
-# 在 /Users/saintgeo/Desktop/self-learn/swarm/config.py 中配置
+# 在项目根目录上层的 config.py 中配置
 MEM0_CONFIG = {
     "api_key": "m0-your-api-key-here",  # 获取地址：https://app.mem0.ai
 }
