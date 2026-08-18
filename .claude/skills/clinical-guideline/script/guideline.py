@@ -2,6 +2,7 @@
 Clinical Guideline Skill
 临床指南检索 Skill（自包含，无需依赖tools）
 """
+import asyncio
 from typing import Dict, Any
 from loguru import logger
 
@@ -36,11 +37,12 @@ async def clinical_guideline(query: str, max_results: int = 1) -> Dict[str, Any]
     # 使用知识库单例
     kb = get_knowledge_base()
 
-    # 使用 Milvus 检索临床指南
-    results = kb.search(
+    # 使用 Milvus 检索临床指南（同步 encode/查询放到线程池）
+    results = await asyncio.to_thread(
+        kb.search,
         query=f"{query} 临床指南 诊疗规范",
-        top_k=max_results,  # 使用传入的 max_results 参数
-        filter_type="clinical_guideline"
+        top_k=max_results,
+        filter_type="clinical_guideline",
     )
 
     if results and results[0]["score"] > 0.1:

@@ -2,6 +2,7 @@
 Search Conversation History Skill
 搜索当前会话历史（短期记忆）
 """
+import asyncio
 from typing import Dict, Any
 from loguru import logger
 
@@ -30,8 +31,12 @@ async def search_history(session_id: str, limit: int = 10) -> Dict[str, Any]:
         # 获取短期记忆实例
         memory = ShortTermMemory(storage_type="memory")
 
-        # 获取历史消息
-        messages = memory.get_recent_messages(session_id, limit=limit * 2)  # 每轮包含user+assistant
+        # Redis 后端是同步 I/O；统一 offload，避免 async skill 绕过 executor
+        messages = await asyncio.to_thread(
+            memory.get_recent_messages,
+            session_id,
+            limit * 2,  # 每轮包含 user+assistant
+        )
 
         if not messages:
             return {

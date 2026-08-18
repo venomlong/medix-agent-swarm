@@ -2,6 +2,7 @@
 Assess Risk Skill
 风险评估 Skill（依赖 RAG 知识库）
 """
+import asyncio
 from typing import Dict, Any, List
 from loguru import logger
 
@@ -80,10 +81,11 @@ async def assess_risk(symptoms: str) -> Dict[str, Any]:
         kb = get_knowledge_base()
         # 根据风险等级查询相关医学知识
         risk_query = f"{symptoms} 紧急程度 风险评估 就医建议"
-        results = kb.search(
+        results = await asyncio.to_thread(
+            kb.search,
             query=risk_query,
             top_k=1,
-            filter_type=None
+            filter_type=None,
         )
         if results and results[0]["score"] > 0.5:
             kb_advice = results[0]["content"][:300]  # 限制长度

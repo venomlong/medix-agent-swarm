@@ -110,9 +110,12 @@ class SwarmCoordinator:
         # 注意：短期记忆（当前会话历史）不放进 context——
         # AgentLoop 会通过 get_history() 把历史作为独立 messages 注入一次，
         # 若再塞进 context 会导致同一份历史进两次 prompt（且是 dict 字符串形式）
-        similar_memories = self.long_term_memory.search_similar_sessions(
+        # Mem0 SDK 是同步 HTTP 客户端；在 async 路径直接调用会卡住事件循环，
+        # Swarm 的 asyncio.gather 并行也会被串行化。放到线程池执行。
+        similar_memories = await asyncio.to_thread(
+            self.long_term_memory.search_similar_sessions,
             query=question,
-            limit=3
+            limit=3,
         )
 
         # 2. 构建增强上下文
@@ -216,7 +219,8 @@ class SwarmCoordinator:
 
         # 保存到长期记忆
         try:
-            self.long_term_memory.add_session_summary(
+            await asyncio.to_thread(
+                self.long_term_memory.add_session_summary,
                 session_id=session_id,
                 question=question,
                 answer=final_answer,
@@ -224,7 +228,7 @@ class SwarmCoordinator:
                     "mode": mode,
                     "subtasks_count": len(subtasks),
                     "total_time": (end_time - start_time).total_seconds(),
-                }
+                },
             )
             logger.info(f"Saved to long-term memory (session={session_id}, mode={mode})")
         except Exception as e:
@@ -343,7 +347,8 @@ class SwarmCoordinator:
         # 保存到 Mem0 长期记忆
         try:
             # 保存会话总结
-            self.long_term_memory.add_session_summary(
+            await asyncio.to_thread(
+                self.long_term_memory.add_session_summary,
                 session_id=session_id,
                 question=question,
                 answer=final_answer,
@@ -352,7 +357,7 @@ class SwarmCoordinator:
                     "agents_count": len(shared_context.agent_contributions),
                     "total_time": (end_time - start_time).total_seconds(),
                     "timeout_occurred": timeout_occurred
-                }
+                },
             )
 
             logger.info(f"Saved to Mem0 long-term memory (session={session_id})")

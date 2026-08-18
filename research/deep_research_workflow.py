@@ -148,7 +148,12 @@ class DeepResearchWorkflow:
             文档列表（字典格式）
         """
         try:
-            results = self.knowledge_base.search(query=query, top_k=top_k, filter_type=None)
+            results = await asyncio.to_thread(
+                self.knowledge_base.search,
+                query=query,
+                top_k=top_k,
+                filter_type=None,
+            )
             logger.debug(f"Milvus search returned {len(results)} results for: {query[:50]}...")
             return results
         except Exception as e:

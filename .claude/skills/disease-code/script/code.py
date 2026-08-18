@@ -2,6 +2,7 @@
 Disease Code Skill
 疾病编码查询 Skill（自包含，无需依赖tools）
 """
+import asyncio
 from typing import Dict, Any
 from loguru import logger
 
@@ -35,11 +36,12 @@ async def disease_code(disease_name: str) -> Dict[str, Any]:
     # 使用知识库单例
     kb = get_knowledge_base()
 
-    # 使用 Milvus 检索疾病编码
-    results = kb.search(
+    # 使用 Milvus 检索疾病编码（同步 encode/查询放到线程池）
+    results = await asyncio.to_thread(
+        kb.search,
         query=f"{disease_name} ICD-10编码 疾病分类",
         top_k=1,
-        filter_type="disease_classification"
+        filter_type="disease_classification",
     )
 
     if results and results[0]["score"] > 0.1:

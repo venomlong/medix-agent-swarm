@@ -2,6 +2,7 @@
 Recommend Lifestyle Skill
 生活方式建议 Skill（自包含，无需依赖tools）
 """
+import asyncio
 from typing import Dict, Any
 from loguru import logger
 
@@ -35,11 +36,12 @@ async def recommend_lifestyle(diagnosis: str) -> Dict[str, Any]:
     # 使用知识库单例
     kb = get_knowledge_base()
 
-    # 从 Milvus 检索生活方式建议
-    results = kb.search(
+    # 从 Milvus 检索生活方式建议（同步 encode/查询放到线程池）
+    results = await asyncio.to_thread(
+        kb.search,
         query=f"{diagnosis} 生活方式建议 饮食 运动 用药",
         top_k=1,
-        filter_type="lifestyle"
+        filter_type="lifestyle",
     )
 
     if results and results[0]["score"] > 0.1:

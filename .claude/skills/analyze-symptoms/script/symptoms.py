@@ -2,6 +2,7 @@
 Analyze Symptoms Skill
 症状分析 Skill（依赖 RAG 知识库）
 """
+import asyncio
 from typing import Dict, Any, List
 from loguru import logger
 
@@ -106,10 +107,11 @@ async def analyze_symptoms(symptoms: str) -> Dict[str, Any]:
             kb = get_knowledge_base()
             # 查询最可能的前3个疾病的详细信息
             for disease in possible_diseases[:3]:
-                results = kb.search(
+                results = await asyncio.to_thread(
+                    kb.search,
                     query=f"{disease} 症状 诊断 鉴别",
                     top_k=1,
-                    filter_type=None
+                    filter_type=None,
                 )
                 if results and results[0]["score"] > 0.5:
                     kb_insights.append({

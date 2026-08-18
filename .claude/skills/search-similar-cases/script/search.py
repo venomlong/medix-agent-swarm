@@ -2,6 +2,7 @@
 Search Similar Cases Skill
 搜索相似历史案例（长期记忆/Mem0）
 """
+import asyncio
 from typing import Dict, Any
 from loguru import logger
 
@@ -37,8 +38,12 @@ async def search_similar_cases(query: str, max_results: int = 3) -> Dict[str, An
                 "query": query
             }
 
-        # 搜索相似会话
-        results = memory.search_similar_sessions(query=query, limit=max_results)
+        # Mem0 搜索是同步 HTTP；Skill 声明为 async 会绕过 SkillRegistry 的 executor
+        results = await asyncio.to_thread(
+            memory.search_similar_sessions,
+            query=query,
+            limit=max_results,
+        )
 
         if not results:
             return {
