@@ -28,8 +28,8 @@ async def search_history(session_id: str, limit: int = 10) -> Dict[str, Any]:
         # 导入记忆系统
         from memory.short_term import ShortTermMemory
 
-        # 获取短期记忆实例
-        memory = ShortTermMemory(storage_type="memory")
+        # 无参：复用 Coordinator 已初始化的单例，避免 storage_type="memory" 覆盖 redis 意图
+        memory = ShortTermMemory()
 
         # Redis 后端是同步 I/O；统一 offload，避免 async skill 绕过 executor
         messages = await asyncio.to_thread(

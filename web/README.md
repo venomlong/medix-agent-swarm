@@ -19,6 +19,8 @@ npm run dev
 
 开发服务器默认端口 **5173**。Vite 把 `/api` 反代到 `http://127.0.0.1:8000`，浏览器打开 `http://localhost:5173`。
 
+短期记忆默认走本机 Redis（非云端），按 `session:{session_id}` 分 key（TTL 1 小时）。请先启动 Redis，例如 `docker run -d -p 6379:6379 redis`；连不上时后端降级内存，重启 uvicorn 后同一 `session_id` 读不到上一轮。
+
 `VITE_API_BASE` 默认空字符串，请求走相对路径 `/api/chat`。
 
 预览生产构建：

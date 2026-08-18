@@ -3,15 +3,52 @@
 
 功能：
 - 管理会话级的对话历史（messages）
-- 支持两种存储后端：内存（默认）和 Redis（可选）
+- 默认 Redis 存储；连不上时降级到内存
 - 自动过期机制（Redis 1小时）
 - 熵管理：自动去重和压缩（Harness Engineering）
 """
+import os
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import json
 from loguru import logger
+
+# 与 long_term.py 一致：加载仓库父目录 config.py
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def get_redis_config() -> Dict[str, Any]:
+    """
+    解析 Redis 连接信息：环境变量 > config.REDIS_CONFIG > 默认值。
+    不硬编码密码；REDIS_PASSWORD 仅从环境变量读取（若 config 未提供）。
+    """
+    cfg: Dict[str, Any] = {
+        "host": "127.0.0.1",
+        "port": 6379,
+        "db": 0,
+        "password": None,
+    }
+    try:
+        from config import REDIS_CONFIG
+        if isinstance(REDIS_CONFIG, dict):
+            for key in ("host", "port", "db", "password"):
+                if key in REDIS_CONFIG and REDIS_CONFIG[key] not in (None, ""):
+                    cfg[key] = REDIS_CONFIG[key]
+    except ImportError:
+        pass
+
+    if os.environ.get("REDIS_HOST"):
+        cfg["host"] = os.environ["REDIS_HOST"]
+    if os.environ.get("REDIS_PORT"):
+        cfg["port"] = int(os.environ["REDIS_PORT"])
+    if os.environ.get("REDIS_DB"):
+        cfg["db"] = int(os.environ["REDIS_DB"])
+    if "REDIS_PASSWORD" in os.environ:
+        cfg["password"] = os.environ.get("REDIS_PASSWORD") or None
+
+    return cfg
 
 # Harness Engineering: 熵管理
 try:
@@ -71,8 +108,8 @@ class ShortTermMemory:
     短期记忆管理器（单例模式）
 
     支持两种存储后端：
-    1. memory：纯内存存储（默认，快速但不持久）
-    2. redis：Redis 存储（可选，持久但需要 Redis 服务）
+    1. redis：Redis 存储（默认；TTL 1 小时，key 为 session:{session_id}）
+    2. memory：纯内存存储（Redis 连不上时自动降级）
 
     使用场景：
     - 管理单次会话的对话历史
@@ -91,22 +128,27 @@ class ShortTermMemory:
 
     def __init__(
         self,
-        storage_type: str = "memory",
+        storage_type: str = "redis",
         redis_config: Optional[Dict[str, Any]] = None
     ):
         """
         初始化短期记忆管理器
 
         Args:
-            storage_type: 存储类型，"memory" 或 "redis"
-            redis_config: Redis 配置（storage_type="redis" 时需要）
+            storage_type: 存储类型，"redis"（默认）或 "memory"
+            redis_config: Redis 配置；缺省时从环境变量 / REDIS_CONFIG 读取
         """
-        # 单例只初始化一次；后续构造若传入不同参数会被静默忽略，必须提示调用方
+        # 单例只初始化一次。无参/默认调用视为获取单例（search-history 等）；
+        # 仅在后续显式传入不同后端或不同 redis_config 时告警。
         if getattr(self, "_initialized", False):
-            if (
-                storage_type != self.storage_type
-                or redis_config != getattr(self, "_init_redis_config", None)
-            ):
+            requested_differs = (
+                (storage_type != "redis" and storage_type != self.storage_type)
+                or (
+                    redis_config is not None
+                    and redis_config != getattr(self, "_init_redis_config", None)
+                )
+            )
+            if requested_differs:
                 logger.warning(
                     "ShortTermMemory is a singleton already initialized with "
                     f"storage_type={self.storage_type!r}; ignoring subsequent "
@@ -126,21 +168,36 @@ class ShortTermMemory:
             logger.debug("✅ Entropy management enabled for short-term memory")
 
         if storage_type == "redis":
+            config = dict(get_redis_config())
+            if redis_config:
+                config.update({k: v for k, v in redis_config.items() if v is not None})
+            self._init_redis_config = config
+            host = config.get("host", "127.0.0.1")
+            port = int(config.get("port", 6379))
+            db = int(config.get("db", 0))
             try:
                 import redis
-                config = redis_config or {}
                 self.redis_client = redis.Redis(
-                    host=config.get("host", "localhost"),
-                    port=config.get("port", 6379),
-                    db=config.get("db", 0),
+                    host=host,
+                    port=port,
+                    db=db,
                     password=config.get("password"),
-                    decode_responses=True
+                    decode_responses=True,
+                    socket_connect_timeout=2,
+                    socket_timeout=2,
                 )
                 # 测试连接
                 self.redis_client.ping()
-                logger.info("ShortTermMemory initialized with Redis")
+                logger.info(
+                    f"ShortTermMemory initialized with Redis at {host}:{port} db={db} "
+                    f"(key=session:{{id}}, TTL=3600s)"
+                )
             except Exception as e:
-                logger.error(f"Failed to connect to Redis: {e}. Falling back to memory storage.")
+                logger.error(
+                    f"Failed to connect to Redis at {host}:{port} db={db}: {e}. "
+                    "Falling back to in-memory short-term storage "
+                    "(sessions will not survive process restart)."
+                )
                 self.storage_type = "memory"
                 self.redis_client = None
         else:

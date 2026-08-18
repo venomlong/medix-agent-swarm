@@ -11,7 +11,7 @@
 - **🔧 Skills 直达架构**: 9个 Skills 自包含（7个原子 + search-history + search-similar-cases），直接转换为 OpenAI function calling 格式 ✅
 - **🤖 Agent Loop**: LLM 驱动的 Skill 调用循环，Agent 自主规划、调用 Skills 并完成任务 ✅
 - **🐝 Agent Swarm**: 真正的群体智能（去中心化协作，自主任务认领，并行执行）✅
-- **🧠 记忆系统**: 短期记忆（会话级对话历史）+ 长期记忆（Mem0跨会话记忆）+ **多轮对话上下文利用** ✅
+- **🧠 记忆系统**: 短期记忆（会话级对话历史，默认 Redis）+ 长期记忆（Mem0跨会话记忆）+ **多轮对话上下文利用** ✅
 - **💾 Milvus 知识库**: 统一知识管理，语义检索，支持模糊查询（"血压高" → "高血压"）✅
 - **⚡ Claude Code Skills**: 9个预定义技能（7个原子 + 2个记忆），一键调用医疗助手 ✅
 - **🏗️ Harness Engineering**: 约束驱动 + 熵管理，系统自动验证和优化，保证安全、简洁、高质量 ✅
@@ -320,9 +320,9 @@ MEM0_CONFIG = {
     "api_key": "m0-your-api-key-here",  # 获取地址：https://app.mem0.ai
 }
 
-# Redis config (Short-term memory persistence, optional)
+# Redis config (short-term memory; override with REDIS_HOST / REDIS_PORT / REDIS_DB / REDIS_PASSWORD)
 REDIS_CONFIG = {
-    "host": "localhost",
+    "host": "127.0.0.1",
     "port": 6379,
     "db": 0,
 }
@@ -334,35 +334,33 @@ REDIS_CONFIG = {
 
 #### 短期记忆（ShortTermMemory）
 
-**作用**：存储当前会话的对话历史，支持多轮对话上下文理解。
+**作用**：存储当前会话的对话历史，支持多轮对话上下文理解。默认写入本机 Redis（非云端；key 为 `session:{session_id}`，不同会话分开，TTL 1 小时），重启后端后同一 `session_id` 仍能读到最近几轮。连不上 Redis 时自动降级到内存并打错误日志。
 
 **配置**：
 ```python
-# 方式1: 内存存储（默认，无需配置）
+# 默认 Redis（连接信息来自 REDIS_HOST/PORT/DB/PASSWORD 或 REDIS_CONFIG）
 from memory.short_term import ShortTermMemory
-memory = ShortTermMemory(session_id="user_123", storage_type="memory")
+memory = ShortTermMemory()  # storage_type="redis"
 
-# 方式2: Redis持久化（可选）
-memory = ShortTermMemory(session_id="user_123", storage_type="redis")
+# 仅调试：强制内存（不持久）
+memory = ShortTermMemory(storage_type="memory")
 ```
+
+需本机 Redis，例如：`docker run -d -p 6379:6379 redis`
 
 **使用示例**：
 ```python
-# 添加消息
-memory.add_message(role="user", content="我有高血压")
-memory.add_message(role="assistant", content="高血压需要...")
-
-# 获取对话历史（最近10条）
-history = memory.get_messages(limit=10)
-
-# 会话结束时清空
-memory.clear()
+memory.create_session("user_123")
+memory.add_message("user_123", role="user", content="我有高血压")
+memory.add_message("user_123", role="assistant", content="高血压需要...")
+history = memory.get_history("user_123", limit=10)
+memory.clear_session("user_123")
 ```
 
 **存储方式**：
-- **内存**（默认）：无需配置，保留时间60分钟
-- **Redis**（可选）：需配置 REDIS_CONFIG，支持持久化
-- 存储容量：最近10条消息
+- **Redis**（默认）：需本机 Redis（127.0.0.1:6379）；可用环境变量或 `REDIS_CONFIG` 覆盖
+- **内存**（降级）：Redis 不可达时自动切换，进程重启后会话历史丢失
+- 存储容量：最近若干轮消息（Agent Loop 读取约 5 轮）
 
 #### 长期记忆（Mem0）
 
@@ -435,7 +433,7 @@ results = memory.search("高血压患者如何管理？")
 
 **注意事项**：
 - 未设置 `MEM0_CONFIG["api_key"]` 时，系统会优雅降级，仅使用短期记忆继续工作
-- 短期记忆默认使用内存存储，无需配置 Redis
+- 短期记忆默认使用 Redis；连不上时降级内存。请先启动本机 Redis，否则重启 uvicorn 后同一 session_id 读不到上一轮
 - 长期记忆依赖 Mem0 云服务，需注册账号获取 API Key
 
 ## 🏗️ Harness Engineering 融合
@@ -515,7 +513,7 @@ python examples/test_all.py
 
 - [x] Agent Identity Files（IDENTITY.md）
 - [x] Session Summaries（会话总结）
-- [x] **短期记忆**（会话级对话历史，支持内存/Redis）
+- [x] **短期记忆**（会话级对话历史，默认 Redis，连不上则内存）
 - [x] **长期记忆**（Mem0云服务集成，向量相似度搜索）
 - [x] 跨会话记忆检索
 - [x] 相似案例推荐
@@ -691,11 +689,11 @@ ConsultAgent DiagAgent ResearchAgent
 
 ```
 ┌────────────────────────────────────┐
-│  短期记忆（会话级，内存/Redis）     │
+│  短期记忆（会话级，默认本机 Redis） │
 │  - 对话历史（messages）            │
 │  - 当前会话上下文                  │
 │  - 保留时间：60分钟                │
-│  存储：内存（默认）或 Redis        │
+│  存储：Redis（默认）或内存（降级）  │
 └────────────────────────────────────┘
            ↕ (会话结束时)
 ┌────────────────────────────────────┐

@@ -20,6 +20,7 @@ from .lead_agent import LeadAgent
 from .events import Event, EventType
 from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
 from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongTermMemory
+from memory.short_term import get_redis_config
 
 
 class SwarmCoordinator:
@@ -61,7 +62,11 @@ class SwarmCoordinator:
 
         # 记忆管理器
         self.session_manager = SessionSummaryManager()
-        self.short_term_memory = ShortTermMemory(storage_type="memory")  # 或 "redis"
+        # 必须由 Coordinator 先以 redis 初始化单例；连不上时 ShortTermMemory 内部降级内存
+        self.short_term_memory = ShortTermMemory(
+            storage_type="redis",
+            redis_config=get_redis_config(),
+        )
         self.long_term_memory = LongTermMemory()
 
         # 将短期记忆注入到所有 Worker Agent 的 Loop
