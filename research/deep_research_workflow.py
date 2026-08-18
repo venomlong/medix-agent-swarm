@@ -83,7 +83,7 @@ class DeepResearchWorkflow:
 
         # Step 2: 并行搜索
         web_results: List[SearchResult] = []
-        kb_results: List[Document] = []
+        kb_results: List[Dict[str, Any]] = []
 
         search_tasks = []
 

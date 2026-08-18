@@ -4,16 +4,16 @@
 
 ## 📋 项目概述
 
-本项目采用创新的 **Skills-Agent 两层架构**，通过7个自包含的原子 Skills 和3个专业 Agent 协同工作，提供智能、专业的医疗服务。
+本项目采用创新的 **Skills-Agent 两层架构**，通过9个 Skills（7个原子 + 2个记忆）和3个专业 Agent 协同工作，提供智能、专业的医疗服务。
 
 ### 🎯 核心特性
 
-- **🔧 Skills 直达架构**: 7个原子 Skills 自包含，直接转换为 OpenAI function calling 格式 ✅
+- **🔧 Skills 直达架构**: 9个 Skills 自包含（7个原子 + search-history + search-similar-cases），直接转换为 OpenAI function calling 格式 ✅
 - **🤖 Agent Loop**: LLM 驱动的 Skill 调用循环，Agent 自主规划、调用 Skills 并完成任务 ✅
 - **🐝 Agent Swarm**: 真正的群体智能（去中心化协作，自主任务认领，并行执行）✅
 - **🧠 记忆系统**: 短期记忆（会话级对话历史）+ 长期记忆（Mem0跨会话记忆）+ **多轮对话上下文利用** ✅
 - **💾 Milvus 知识库**: 统一知识管理，语义检索，支持模糊查询（"血压高" → "高血压"）✅
-- **⚡ Claude Code Skills**: 8个预定义技能（7个原子 + 1个复杂），一键调用医疗助手 ✅
+- **⚡ Claude Code Skills**: 9个预定义技能（7个原子 + 2个记忆），一键调用医疗助手 ✅
 - **🏗️ Harness Engineering**: 约束驱动 + 熵管理，系统自动验证和优化，保证安全、简洁、高质量 ✅
 
 ## 🎯 Skills 直达架构
@@ -38,13 +38,13 @@ Skills (函数) → 直接转换 → OpenAI Format → LLM 调用
    ```
 
 3. **Agent 灵活选择**
-   - 每个 Agent 注册全部7个 Skills
+   - 每个 Agent 注册全部9个 Skills
    - Agent Loop 根据任务自主选择合适的 Skills
    - 一个 Agent 可以跨领域调用 Skills
 
 4. **用户友好入口**
    - 7个原子 Skills：快速查询，立即响应
-   - 1个复杂 Skill：触发 Swarm 协作
+   - 2个记忆 Skills：当前会话历史与跨会话相似案例
    - 用户无需理解 Agent 架构
 
 5. **多轮对话支持**
@@ -54,7 +54,7 @@ Skills (函数) → 直接转换 → OpenAI Format → LLM 调用
 
 ### 测试验证
 
-**所有测试通过（26个测试用例，100% 通过率）**：
+**测试结果（以 `TEST_REPORT.md` 为准：24 / 26 通过）**：
 
 **核心功能**：
 - ✅ Agent Loop 和 Skill 调用
@@ -243,9 +243,9 @@ medix-agent-swarm/
 
 ## 🤖 Skills 和 Agent 清单
 
-### 7个原子 Skills（两层架构）
+### 9个 Skills（两层架构）
 
-**所有 Agent 共享以下 Skills**：
+**所有 Agent 共享以下 Skills**（7个原子 + 2个记忆）：
 
 | Skill | 功能 | 数据源 | 特点 |
 |-------|------|--------|------|
@@ -255,23 +255,25 @@ medix-agent-swarm/
 | `analyze_symptoms` | 症状模式分析 | 规则引擎 | 多系统分析 |
 | `disease_code` | ICD-10疾病编码 | Milvus | 标准编码 |
 | `clinical_guideline` | 临床指南检索 | Milvus | 权威指南 |
-| `deep_research` | 深度研究 | 网络搜索 | 最新进展 |
+| `deep_research` | 深度研究 | 网络搜索 + Milvus | 证据综合 |
+| `search_history` | 搜索当前会话历史 | 短期记忆 | 多轮对话 |
+| `search_similar_cases` | 搜索相似历史案例 | Mem0 长期记忆 | 跨会话 |
 
 ### 3个专业 Agent（自主选择 Skills）
 
 #### 1. ConsultationAgent（健康咨询）
 - **能力**: 通用健康咨询和生活方式指导
-- **注册 Skills**: 全部7个（自主选择合适的 Skills）
+- **注册 Skills**: 全部9个（自主选择合适的 Skills）
 - **常用 Skills**: `search_knowledge`, `recommend_lifestyle`
 
 #### 2. DiagnosticAgent（症状诊断）
 - **能力**: 症状分析、风险评估和鉴别诊断
-- **注册 Skills**: 全部7个（自主选择合适的 Skills）
+- **注册 Skills**: 全部9个（自主选择合适的 Skills）
 - **常用 Skills**: `assess_risk`, `analyze_symptoms`, `disease_code`
 
 #### 3. ResearchAgent（医学研究）
 - **能力**: 循证医学证据和权威指南检索
-- **注册 Skills**: 全部7个（自主选择合适的 Skills）
+- **注册 Skills**: 全部9个（自主选择合适的 Skills）
 - **常用 Skills**: `clinical_guideline`, `deep_research`
 
 ### 2个协调 Agent
@@ -283,7 +285,7 @@ medix-agent-swarm/
 
 - ✅ **直达架构**: Skills → OpenAI Format
 - ✅ **Skills 自包含**: 直接调用 Milvus 或内置逻辑
-- ✅ **Agent 灵活性**: 每个 Agent 注册全部7个 Skills，根据任务自主选择
+- ✅ **Agent 灵活性**: 每个 Agent 注册全部9个 Skills，根据任务自主选择
 - ✅ **SkillRegistry**: 统一管理注册、执行、格式转换
 - ✅ **统一知识库**: 医学知识统一存储在 Milvus 向量数据库，支持语义检索
 - ✅ **易于扩展**: 添加新 Skill 或新知识无需修改 Agent 代码

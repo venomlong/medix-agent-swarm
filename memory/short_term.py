@@ -101,11 +101,21 @@ class ShortTermMemory:
             storage_type: 存储类型，"memory" 或 "redis"
             redis_config: Redis 配置（storage_type="redis" 时需要）
         """
-        # 防止重复初始化
-        if hasattr(self, '_initialized'):
+        # 单例只初始化一次；后续构造若传入不同参数会被静默忽略，必须提示调用方
+        if getattr(self, "_initialized", False):
+            if (
+                storage_type != self.storage_type
+                or redis_config != getattr(self, "_init_redis_config", None)
+            ):
+                logger.warning(
+                    "ShortTermMemory is a singleton already initialized with "
+                    f"storage_type={self.storage_type!r}; ignoring subsequent "
+                    f"arguments (storage_type={storage_type!r})"
+                )
             return
 
         self.storage_type = storage_type
+        self._init_redis_config = redis_config
         self.sessions: Dict[str, ConversationHistory] = {}
         self.redis_client = None
         self._initialized = True
