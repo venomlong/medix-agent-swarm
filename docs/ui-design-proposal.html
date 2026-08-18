@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MediX 可视化界面设计方案 · 清新自然</title>
+  <style>
+    :root {
+      --paper: #F7F4EC;
+      --card: #FDFCF8;
+      --sage-light: #E9EFE3;
+      --sage: #7C9A82;
+      --moss: #5F7F68;
+      --ink: #2F3B33;
+      --gray: #8A8578;
+      --wood: #D9C7A7;
+      --wood-deep: #B49B72;
+      --line: #E4DFD3;
+      --clay: #C77E5C;
+      --rust: #B85C4A;
+      --mist: #8FA8B2;
+      --white: #FFFFFF;
+      --panel: #F3F0E7;
+      --shadow: 0 2px 12px rgba(47, 59, 51, 0.06);
+      --shadow-hover: 0 6px 22px rgba(47, 59, 51, 0.10);
+      --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+      --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+      --nav-h: 64px;
+      --max: 1120px;
+      --r-card: 16px;
+      --r-btn: 10px;
+      --r-bubble: 14px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 16px); }
+    body {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg { display: block; }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+    /* —— 顶栏 —— */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: var(--nav-h);
+      background: rgba(253, 252, 248, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      height: 100%;
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .brand-name {
+      font-family: var(--font-serif);
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 1.5px;
+      color: var(--ink);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav-links::-webkit-scrollbar { display: none; }
+    .nav-links a {
+      white-space: nowrap;
+      font-size: 13px;
+      color: var(--gray);
+      padding: 6px 12px;
+      border-radius: 999px;
+      transition: color 0.2s ease-out, background 0.2s ease-out;
+    }
+    .nav-links a:hover { color: var(--moss); background: var(--sage-light); }
+    .nav-links a.active {
+      color: var(--moss);
+      background: var(--sage-light);
+      font-weight: 600;
+    }
+
+    /* —— 通用 —— */
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+    section { padding: 72px 0 24px; }
+    .sec-kicker {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .sec-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--wood-deep);
+      letter-spacing: 0.08em;
+    }
+    .sec-line {
+      width: 36px;
+      height: 1px;
+      background: var(--wood);
+    }
+    h1, h2, h3 {
+      font-family: var(--font-serif);
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.35;
+    }
+    h1 { font-size: 42px; letter-spacing: 0.5px; }
+    h2 { font-size: 28px; margin-bottom: 12px; }
+    h3 { font-size: 18px; margin-bottom: 14px; }
+    .lede { color: var(--gray); font-size: 16px; max-width: 760px; }
+    .muted { color: var(--gray); }
+    .mono { font-family: var(--font-mono); }
+    .mt-8 { margin-top: 8px; }
+    .mt-16 { margin-top: 16px; }
+    .mt-24 { margin-top: 24px; }
+    .mt-32 { margin-top: 32px; }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--sage-light);
+      color: var(--moss);
+      border: 1px solid transparent;
+    }
+    .pill.ghost {
+      background: var(--card);
+      color: var(--gray);
+      border-color: var(--line);
+    }
+    .pill.wood {
+      background: #D9C7A733;
+      color: var(--wood-deep);
+      border-color: var(--line);
+    }
+    .pill.clay {
+      background: #C77E5C1A;
+      color: var(--clay);
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r-card);
+      box-shadow: var(--shadow);
+    }
+    .callout {
+      display: flex;
+      gap: 14px;
+      padding: 16px 20px;
+      border-radius: 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .callout.info { border-left: 3px solid var(--mist); }
+    .callout.ok { border-left: 3px solid var(--moss); }
+    .callout.warn { border-left: 3px solid var(--clay); }
+    .callout h4 {
+      font-family: var(--font-serif);
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+    .callout p { font-size: 13.5px; color: var(--gray); line-height: 1.65; }
+    .dot-mark {
+      width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; margin-top: 6px;
+    }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+
+    table.data {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      font-size: 13.5px;
+    }
+    table.data th {
+      text-align: left;
+      font-weight: 600;
+      color: var(--gray);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      padding: 12px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    table.data td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      line-height: 1.6;
+    }
+    table.data tr:last-child td { border-bottom: none; }
+    table.data tr.hl td { background: #E9EFE355; }
+    table.data td:first-child { font-weight: 600; white-space: nowrap; }
+
+    /* —— 封面 —— */
+    .hero {
+      padding: 56px 0 40px;
+    }
+    .hero-top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 32px;
+    }
+    .hero-copy { max-width: 680px; }
+    .hero-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--moss);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+    }
+    .hero h1 { margin-bottom: 8px; }
+    .hero-sub {
+      font-family: var(--font-serif);
+      font-size: 22px;
+      color: var(--moss);
+      margin-bottom: 18px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 36px;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    .stat .v {
+      font-family: var(--font-serif);
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--moss);
+      line-height: 1.2;
+    }
+    .stat .l { font-size: 12px; color: var(--gray); margin-top: 4px; }
+
+    /* —— 用户卡 —— */
+    .user-card { padding: 22px 22px 20px; }
+    .user-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--sage-light);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 14px;
+    }
+    .user-card h3 { font-size: 17px; margin-bottom: 8px; }
+    .user-card p { font-size: 13.5px; color: var(--gray); }
+
+    /* —— 技术选型 —— */
+    .tech-rec {
+      padding: 22px 24px;
+      background: var(--card);
+      border: 1.5px solid var(--sage);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .tech-alt { padding: 20px 22px; }
+    .tech-alt h3, .tech-rec h3 { font-size: 16px; margin-bottom: 6px; }
+    .tech-alt p, .tech-rec p { font-size: 13.5px; color: var(--gray); }
+
+    /* —— 信息架构 —— */
+    .ia-card {
+      padding: 18px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      min-height: 210px;
+    }
+    .ia-idx {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--wood-deep);
+      margin-bottom: 8px;
+    }
+    .ia-card h3 { font-size: 16px; }
+    .ia-card .role { font-size: 12px; color: var(--moss); margin-bottom: 8px; }
+    .ia-card p { font-size: 12.5px; color: var(--gray); flex: 1; }
+    .ia-card.core { border-color: var(--sage); background: linear-gradient(180deg, #E9EFE355, var(--card)); }
+
+    /* —— 色卡 —— */
+    .swatch {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    .swatch-color {
+      height: 72px;
+      display: flex;
+      align-items: flex-end;
+      padding: 8px 12px;
+    }
+    .swatch-color code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .swatch-meta { padding: 10px 12px 12px; }
+    .swatch-meta strong { display: block; font-size: 13.5px; }
+    .swatch-meta span { font-size: 12px; color: var(--gray); }
+
+    .type-board {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 32px;
+      box-shadow: var(--shadow);
+    }
+    .type-board .sample-serif {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .type-board .sample-sans { font-size: 16px; margin-top: 4px; }
+    .type-board .sample-mono {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      color: var(--moss);
+      margin-top: 4px;
+    }
+    .type-cap { font-size: 12px; color: var(--gray); margin-top: 6px; }
+
+    .comp-board {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--r-btn);
+      padding: 8px 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .btn-primary { background: var(--sage); color: var(--white); }
+    .btn-ghost { background: var(--card); color: var(--moss); border: 1px solid var(--sage); }
+    .btn-text { color: var(--gray); padding: 8px 8px; }
+    .agent-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 999px; padding: 4px 12px 4px 4px;
+    }
+    .avatar {
+      width: 20px; height: 20px; border-radius: 999px;
+      color: var(--white); font-size: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gray); }
+    .status i {
+      width: 9px; height: 9px; border-radius: 999px; display: inline-block;
+    }
+    .alert-bar {
+      background: #C77E5C14;
+      border-left: 2px solid var(--clay);
+      border-radius: 0 8px 8px 0;
+      padding: 8px 14px;
+      color: var(--clay);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* —— 浏览器窗框 —— */
+    .browser {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--paper);
+      box-shadow: var(--shadow-hover);
+    }
+    .chrome {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+    }
+    .traffic { display: flex; gap: 6px; }
+    .traffic span { width: 10px; height: 10px; border-radius: 999px; }
+    .urlbar {
+      flex: 1;
+      max-width: 320px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--gray);
+      text-align: center;
+    }
+    .mock-nav {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 18px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+    }
+    .mock-nav .logo {
+      display: flex; align-items: center; gap: 7px;
+      font-family: var(--font-serif);
+      font-weight: 700; font-size: 13px; letter-spacing: 1px;
+    }
+    .mock-tabs { display: flex; gap: 4px; }
+    .mock-tabs span {
+      font-size: 12px; padding: 4px 11px; border-radius: 999px; color: var(--gray);
+    }
+    .mock-tabs span.on { background: var(--sage-light); color: var(--moss); font-weight: 600; }
+    .caption {
+      font-size: 12.5px; color: var(--gray); margin-top: 10px;
+    }
+    .demo-tag {
+      display: inline-flex;
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--wood-deep);
+      background: var(--card);
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    /* 工作台 */
+    .wb { display: grid; grid-template-columns: 1.55fr 1fr; min-height: 520px; }
+    .wb-chat { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+    .time-center { text-align: center; font-size: 11px; color: var(--gray); }
+    .bubble-user {
+      align-self: flex-end;
+      max-width: 82%;
+      background: var(--sage);
+      color: var(--white);
+      border-radius: 14px 14px 4px 14px;
+      padding: 10px 14px;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .answer {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .answer-head { display: flex; align-items: center; gap: 6px; }
+    .avatars { display: flex; }
+    .avatars .avatar { margin-left: -5px; border: 1.5px solid var(--card); }
+    .avatars .avatar:first-child { margin-left: 0; }
+    .composer {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 12px; padding: 8px 8px 8px 14px; margin-top: 4px;
+    }
+    .composer span { flex: 1; font-size: 13px; color: var(--gray); }
+    .send {
+      width: 28px; height: 28px; border-radius: 999px; background: var(--sage);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .wb-side {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .tl {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .tl-item { display: flex; gap: 10px; }
+    .tl-rail { display: flex; flex-direction: column; align-items: center; }
+    .tl-dot {
+      width: 14px; height: 14px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;
+    }
+    .tl-dot.done { background: var(--moss); }
+    .tl-dot.run { background: var(--sage); }
+    .tl-dot.wait { background: transparent; border: 1.5px solid var(--line); }
+    .tl-stem { width: 1px; flex: 1; background: var(--line); margin-top: 3px; }
+    .tl-body { flex: 1; padding-bottom: 12px; min-width: 0; }
+    .tl-item.last .tl-body { padding-bottom: 0; }
+    .tl-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+    .tl-desc { font-size: 11.5px; color: var(--gray); }
+    .event-box {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 10px; padding: 10px 12px;
+    }
+    .event-row { display: flex; gap: 10px; font-family: var(--font-mono); font-size: 11px; line-height: 1.7; }
+    .event-row .ts { color: var(--gray); }
+    .event-row .ev { color: var(--moss); }
+
+    /* 仪表盘 */
+    .dash { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .kpi { padding: 12px 14px; }
+    .kpi .k { font-size: 11.5px; color: var(--gray); }
+    .kpi .n { font-family: var(--font-serif); font-size: 22px; font-weight: 700; color: var(--moss); line-height: 1.25; }
+    .kpi .s { font-size: 11px; color: var(--gray); }
+    .chart-card { padding: 12px 14px; }
+    .bars { display: flex; align-items: flex-end; gap: 10px; height: 110px; padding: 8px 4px 0; }
+    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+    .bar {
+      width: 100%; max-width: 28px; border-radius: 4px 4px 2px 2px; background: var(--sage);
+    }
+    .bar.peak { background: var(--moss); }
+    .bar-v { font-family: var(--font-mono); font-size: 10px; color: var(--gray); }
+    .bar-d { font-size: 10px; color: var(--gray); }
+    .meter { height: 8px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; }
+    .meter > i { display: block; height: 100%; border-radius: 999px; }
+
+    .mem-list, .fix-list { overflow: hidden; }
+    .row-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-top: 1px solid var(--line); font-size: 12.5px;
+    }
+    .row-item:first-child { border-top: none; }
+    .row-item .q { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* 架构 */
+    .layer {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    .layer.new { border-color: var(--sage); }
+    .layer-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .layer-h strong { font-family: var(--font-serif); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .nchip {
+      font-size: 12.5px; padding: 4px 11px; border-radius: 8px;
+      background: var(--panel); border: 1px solid var(--line); color: var(--gray);
+    }
+    .nchip.new { border-color: var(--sage); color: var(--moss); background: var(--sage-light); }
+    .flow-down {
+      display: flex; justify-content: center; gap: 28px; padding: 8px 0;
+      color: var(--gray); font-size: 12px;
+    }
+    .flow-down span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+
+    /* 流程 */
+    .steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+    .step {
+      padding: 16px 14px;
+      position: relative;
+    }
+    .step .sn {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--sage);
+      margin-bottom: 6px;
+    }
+    .step h4 { font-family: var(--font-serif); font-size: 14px; margin-bottom: 6px; }
+    .step p { font-size: 12px; color: var(--gray); }
+    .step .mech {
+      margin-top: 8px; font-size: 11px; color: var(--wood-deep);
+      font-family: var(--font-mono); line-height: 1.45;
+    }
+
+    /* 里程碑 */
+    .ms { display: grid; grid-template-columns: 88px 1fr; gap: 16px; }
+    .ms-rail { position: relative; }
+    .ms-rail::before {
+      content: "";
+      position: absolute;
+      left: 11px; top: 12px; bottom: 12px;
+      width: 1px; background: var(--line);
+    }
+    .ms-item { display: contents; }
+    .ms-dot-col { padding-top: 22px; }
+    .ms-dot {
+      width: 22px; height: 22px; border-radius: 999px;
+      background: var(--sage-light); border: 2px solid var(--sage);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 9px; color: var(--moss);
+      position: relative; z-index: 1;
+    }
+    .ms-card { padding: 16px 18px; margin-bottom: 12px; }
+    .ms-card h4 { font-family: var(--font-serif); font-size: 16px; }
+    .ms-meta { font-size: 12px; color: var(--gray); margin: 2px 0 8px; }
+    .ms-card p { font-size: 13.5px; color: var(--ink); }
+    .ms-acc { font-size: 12.5px; color: var(--moss); margin-top: 6px; }
+
+    footer.page-foot {
+      margin-top: 48px;
+      padding: 28px 0 48px;
+      border-top: 1px solid var(--line);
+      color: var(--gray);
+      font-size: 12.5px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 980px) {
+      h1 { font-size: 32px; }
+      .grid-3, .grid-4, .grid-5, .stats, .steps { grid-template-columns: 1fr 1fr; }
+      .wb { grid-template-columns: 1fr; }
+      .wb-side { border-left: none; border-top: 1px solid var(--line); }
+      .hero-top { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 680px) {
+      .nav-inner, .wrap { padding-left: 16px; padding-right: 16px; }
+      h1 { font-size: 26px; }
+      h2 { font-size: 22px; }
+      .grid-3, .grid-4, .grid-5, .stats, .steps, .grid-2 { grid-template-columns: 1fr; }
+      .ms { grid-template-columns: 36px 1fr; }
+      .nav-links { display: none; }
+      .brand-name { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="章节导航">
+    <div class="nav-inner">
+      <a class="brand" href="#cover">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20.5 3.5C11.5 3.6 5.2 9 4.3 18.6c-.1.9.4 1.6 1.3 1.7 9.7.9 15-5.4 15-16.8Z" fill="#7C9A82"/>
+          <path d="M6.2 18.2C8 12.6 12 8.4 17.6 6.4" stroke="#F7F4EC" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name">MediX 智愈</span>
+      </a>
+      <div class="nav-links">
+        <a href="#cover">概述</a>
+        <a href="#users">目标用户</a>
+        <a href="#tech">技术选型</a>
+        <a href="#ia">信息架构</a>
+        <a href="#design">设计语言</a>
+        <a href="#mockups">界面预览</a>
+        <a href="#arch">架构数据流</a>
+        <a href="#flow">交互流程</a>
+        <a href="#plan">实施计划</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 封面 / 概述 -->
+  <header class="hero" id="cover">
+    <div class="wrap">
+      <div class="hero-top">
+        <div class="hero-copy">
+          <div class="hero-brand">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M20.5 3.5C11.5 3.6 5.2 9 4.3 18.6c-.1.9.4 1.6 1.3 1.7 9.7.9 15-5.4 15-16.8Z" fill="#5F7F68"/>
+              <path d="M6.2 18.2C8 12.6 12 8.4 17.6 6.4" stroke="#F7F4EC" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+            MEDIX AGENT SWARM · 界面设计方案
+          </div>
+          <h1>可视化交互界面</h1>
+          <p class="hero-sub">清新自然 · 让协作过程可见</p>
+          <p class="lede">
+            为 <span class="mono">medix-agent-swarm</span> 多智能体医疗助手设计的 Web 交互界面提案。
+            项目目前仅有命令行入口，多 Agent 协作、Skill 调用、安全修复等最有价值的过程全部藏在日志里；
+            复杂问题需等待 30–90 秒且无中间反馈。本方案将这些过程变成用户可见、可回看的界面，
+            并以自然物候的设计语言传递医疗产品应有的安心感。
+          </p>
+          <div class="pills mt-16">
+            <span class="pill">目标项目 medix-agent-swarm</span>
+            <span class="pill">推荐栈 FastAPI + SSE + React</span>
+            <span class="pill">对齐 IMPROVEMENT_PLAN P1-1</span>
+            <span class="pill ghost">2026-08-17 · 仅为设计方案</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="v">5</div><div class="l">产品页面</div></div>
+        <div class="stat"><div class="v">12</div><div class="l">自然色令牌</div></div>
+        <div class="stat"><div class="v">SSE</div><div class="l">单向事件流</div></div>
+        <div class="stat"><div class="v">M0–M4</div><div class="l">约 4–5 周分期</div></div>
+      </div>
+
+      <div class="callout info mt-24">
+        <span class="dot-mark" style="background:var(--mist)"></span>
+        <div>
+          <h4>与项目既有规划对齐</h4>
+          <p>
+            <span class="mono">IMPROVEMENT_PLAN.md</span> 的 P1-1 已规划「FastAPI + SSE 流式 + 协作过程可视化」，
+            并指出 <span class="mono">swarm/events.py</span> 事件系统目前「只写不读」。
+            本方案即该条目的完整界面落地设计，事件系统恰好被激活为 UI 的数据源。
+          </p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 目标用户 -->
+  <section id="users">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">01</span><span class="sec-line"></span></div>
+      <h2>目标用户</h2>
+      <p class="lede">同一套工作台服务三类场景：作者调试、评审演示、真实咨询。过程可视化是共同需求。</p>
+      <div class="grid-3 mt-24">
+        <article class="card user-card">
+          <div class="user-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="12" rx="2" stroke="#5F7F68" stroke-width="1.6"/>
+              <path d="M8 17v2h8v-2" stroke="#5F7F68" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>开发者（项目作者）</h3>
+          <p>调试与观察多 Agent 协作：路由决策、子任务状态、Skill 调用、事件流、约束违规与修复记录。</p>
+        </article>
+        <article class="card user-card">
+          <div class="user-icon" style="background:#D9C7A733">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="8" r="3" stroke="#B49B72" stroke-width="1.6"/>
+              <path d="M5 19c1.2-3.2 3.6-5 7-5s5.8 1.8 7 5" stroke="#B49B72" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <h3>演示 / 评审观众</h3>
+          <p>面试或汇报场景，直观看到「群体智能」的实际工作过程——这是纯 CLI 无法呈现的核心卖点。</p>
+        </article>
+        <article class="card user-card">
+          <div class="user-icon" style="background:#8FA8B21A">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 18V8l7-4 7 4v10" stroke="#8FA8B2" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M9 18v-5h6v5" stroke="#8FA8B2" stroke-width="1.6"/>
+            </svg>
+          </div>
+          <h3>健康咨询使用者</h3>
+          <p>以对话方式提问，获得流式答案、核心建议、依据来源与安全提示；长等待被过程动画化解。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 技术选型 -->
+  <section id="tech">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">02</span><span class="sec-line"></span></div>
+      <h2>技术选型</h2>
+      <p class="lede">本场景是服务端向浏览器的单向推送。SSE 更简单、可走普通 HTTP、断线自动重连；WebSocket 留到需要「中途干预 Agent」时再升级。</p>
+
+      <div class="tech-rec mt-24">
+        <div class="pills" style="margin-bottom:10px"><span class="pill">推荐 · 正式方案</span></div>
+        <h3>FastAPI + SSE + React（Vite + TypeScript）</h3>
+        <p>
+          后端在现有代码之上加一层薄服务：<span class="mono">POST /chat</span> 返回 SSE 流，
+          EventBus 订阅 SharedContext 事件实时推送；SwarmCoordinator 改为应用级单例
+          （消除每次请求重建 Agent 池的开销）。前端 React 自由实现「清新自然」主题与 Agent 时间线动画。
+          开发成本约 2–3 周。
+        </p>
+      </div>
+
+      <div class="grid-2 mt-16">
+        <article class="card tech-alt">
+          <div class="pills" style="margin-bottom:8px"><span class="pill ghost">备选 · 内部快速原型</span></div>
+          <h3>Gradio / Streamlit</h3>
+          <p>开发成本低（1–2 天），但整体刷新、难做时间线动画，视觉受模板限制，「清新自然」难以落地。</p>
+        </article>
+        <article class="card tech-alt">
+          <div class="pills" style="margin-bottom:8px"><span class="pill ghost">备选 · 将来升级</span></div>
+          <h3>FastAPI + WebSocket + React</h3>
+          <p>双向通信，视觉能力与推荐方案相同。需处理连接状态；待将来需要「中途干预 Agent」时再升级。</p>
+        </article>
+      </div>
+
+      <table class="data mt-24">
+        <thead>
+          <tr><th>方案</th><th>实时事件流</th><th>视觉定制</th><th>开发成本</th><th>结论</th></tr>
+        </thead>
+        <tbody>
+          <tr class="hl">
+            <td>FastAPI + SSE + React</td>
+            <td>原生支持，逐事件推送</td>
+            <td>完全自由，可精确落地设计语言</td>
+            <td>中（约 2–3 周）</td>
+            <td>推荐 · 正式方案</td>
+          </tr>
+          <tr>
+            <td>Gradio / Streamlit</td>
+            <td>弱（整体刷新）</td>
+            <td>受模板限制</td>
+            <td>低（1–2 天）</td>
+            <td>备选 · 快速原型</td>
+          </tr>
+          <tr>
+            <td>FastAPI + WebSocket + React</td>
+            <td>双向通信</td>
+            <td>同推荐方案</td>
+            <td>中高</td>
+            <td>待需要中途干预时升级</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 信息架构 -->
+  <section id="ia">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">03</span><span class="sec-line"></span></div>
+      <h2>信息架构（5 页）</h2>
+      <p class="lede">以对话工作台为核心，其余四页分别承担运行洞察、记忆透明、检索调试与安全审计。</p>
+      <div class="grid-5 mt-24">
+        <article class="card ia-card core">
+          <div class="ia-idx">01 · 核心</div>
+          <h3>对话工作台</h3>
+          <div class="role">提问与回答的主战场</div>
+          <p>左侧对话流（流式答案、核心建议、来源引用、免责声明、AutoFixer 标记）；右侧协作面板（路由决策、Agent 时间线、Skill 调用、事件流）。</p>
+        </article>
+        <article class="card ia-card">
+          <div class="ia-idx">02</div>
+          <h3>总览仪表盘</h3>
+          <div class="role">系统运行一眼可知</div>
+          <p>会话量、Swarm 占比、平均耗时、自动修复次数；后续接入 token / 成本统计（依赖 P0-2）。</p>
+        </article>
+        <article class="card ia-card">
+          <div class="ia-idx">03</div>
+          <h3>会话记忆</h3>
+          <div class="role">历史与上下文透明化</div>
+          <p>会话列表回看、短期记忆（最近 10 条）、Mem0 相似案例及相似度分数、SessionSummary。</p>
+        </article>
+        <article class="card ia-card">
+          <div class="ia-idx">04</div>
+          <h3>知识库</h3>
+          <div class="role">Milvus 检索调试台</div>
+          <p>语义检索试验（输入查询看命中文档与分数）、文档列表、按类型过滤（lifestyle / ICD-10 / 指南）。</p>
+        </article>
+        <article class="card ia-card">
+          <div class="ia-idx">05</div>
+          <h3>安全质量</h3>
+          <div class="role">Harness 可视化</div>
+          <p>约束违规记录（ConstraintValidator）、AutoFixer 修复日志、测试报告（24 / 26，示意）。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 设计语言 -->
+  <section id="design">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">04</span><span class="sec-line"></span></div>
+      <h2>「清新自然」设计语言</h2>
+      <p class="lede">
+        医疗助手需要传递「安心、温和、专业」。方案以自然物候为意象：鼠尾草绿为主色，米白纸感做底，
+        木色与陶土做点缀；标题用衬线字体带出人文感，大圆角与充足留白降低界面的紧张度。
+      </p>
+      <div class="pills mt-16">
+        <span class="pill">鼠尾草绿主色</span>
+        <span class="pill">米白纸感底色</span>
+        <span class="pill">木质点缀</span>
+        <span class="pill">衬线标题</span>
+        <span class="pill">大圆角</span>
+        <span class="pill">呼吸式留白</span>
+      </div>
+
+      <h3 class="mt-32">配色方案（12 色自然色板）</h3>
+      <div class="grid-4" id="palette">
+        <div class="swatch"><div class="swatch-color" style="background:#F7F4EC"><code style="color:#2F3B33">#F7F4EC</code></div><div class="swatch-meta"><strong>米白纸感</strong><span>页面底色 · paper</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FDFCF8"><code style="color:#2F3B33">#FDFCF8</code></div><div class="swatch-meta"><strong>暖白</strong><span>卡片 / 面板 · card</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#E9EFE3"><code style="color:#2F3B33">#E9EFE3</code></div><div class="swatch-meta"><strong>浅草绿</strong><span>选中态 / 浅底 · sageLight</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#7C9A82"><code style="color:#fff">#7C9A82</code></div><div class="swatch-meta"><strong>鼠尾草绿</strong><span>主色 / 按钮 / 用户气泡 · sage</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#5F7F68"><code style="color:#fff">#5F7F68</code></div><div class="swatch-meta"><strong>深苔绿</strong><span>悬停 / 完成态 / 数据强调 · moss</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#2F3B33"><code style="color:#fff">#2F3B33</code></div><div class="swatch-meta"><strong>墨绿</strong><span>主文字 · ink</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#8A8578"><code style="color:#fff">#8A8578</code></div><div class="swatch-meta"><strong>暖灰</strong><span>次要文字 / 说明 · gray</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#D9C7A7"><code style="color:#2F3B33">#D9C7A7</code></div><div class="swatch-meta"><strong>淡木色</strong><span>来源标签 / 次强调 · wood</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#E4DFD3"><code style="color:#2F3B33">#E4DFD3</code></div><div class="swatch-meta"><strong>亚麻线</strong><span>边框 / 分隔线 · line</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#C77E5C"><code style="color:#fff">#C77E5C</code></div><div class="swatch-meta"><strong>陶土</strong><span>警示 / 自动修复标记 · clay</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#B85C4A"><code style="color:#fff">#B85C4A</code></div><div class="swatch-meta"><strong>赭红</strong><span>危险 / 失败态 · rust</span></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#8FA8B2"><code style="color:#fff">#8FA8B2</code></div><div class="swatch-meta"><strong>雾蓝</strong><span>信息 / 链接 / 研究 Agent · mist</span></div></div>
+      </div>
+      <p class="caption">另有辅助令牌 <span class="mono">woodDeep #B49B72</span>，用于木色上的文字与次强调，不单独占色卡位。</p>
+
+      <h3 class="mt-32">字体方案</h3>
+      <div class="type-board">
+        <div>
+          <div class="sample-serif">MediX 智愈助手 —— 温和而专业</div>
+          <div class="type-cap">标题 / 品牌：思源宋体 Noto Serif SC（600–700），备选 Source Han Serif SC、宋体 SC、SimSun</div>
+        </div>
+        <div class="mt-24">
+          <div class="sample-sans">正文示例：头晕乏力在高血压合并糖尿病的老年患者中较为常见，建议规律监测血压并记录发作诱因。</div>
+          <div class="type-cap">正文 / 界面：思源黑体 Noto Sans SC（400 / 500），备选 PingFang SC、微软雅黑；正文 14–15px，行高 1.6–1.75</div>
+        </div>
+        <div class="mt-24">
+          <div class="sample-mono">18.6s · 24/26 · score 0.82 · subtask_completed</div>
+          <div class="type-cap">数据 / 事件流：Consolas 等宽，用于耗时、相似度分数、事件名</div>
+        </div>
+      </div>
+
+      <h3 class="mt-32">风格细节规范</h3>
+      <table class="data">
+        <thead><tr><th>令牌</th><th>取值</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>圆角</td><td>卡片 16px · 按钮/输入框 10px · 气泡 14px（发送侧一角 4px）· 标签全圆</td><td>大圆角是「柔和感」的主要来源</td></tr>
+          <tr><td>阴影</td><td class="mono">0 2px 12px rgba(47,59,51,0.06)</td><td>悬停加深至 0.10；低透明度大模糊，禁用硬阴影</td></tr>
+          <tr><td>留白</td><td>8pt 网格 · 页面边距 ≥32px · 卡片内边距 20–24px · 段落间距 16px</td><td>宁可多留白，不做满铺</td></tr>
+          <tr><td>描边</td><td>1px 亚麻线 #E4DFD3，仅结构性使用</td><td>以边框代替重阴影划分层次</td></tr>
+          <tr><td>动效</td><td>200ms ease-out · 执行中状态点 2s 呼吸脉动 · 答案逐字流出</td><td>动效克制，只服务于「过程感」</td></tr>
+          <tr><td>图形语言</td><td>叶形 Logo · 圆点状态色</td><td>灰=待认领 / 绿=执行中 / 深绿=完成 / 赭红=失败</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="mt-32">组件样板</h3>
+      <div class="comp-board">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+          <span class="btn btn-primary">发起咨询</span>
+          <span class="btn btn-ghost">查看报告</span>
+          <span class="btn btn-text">取消</span>
+          <span style="width:8px"></span>
+          <span class="agent-chip"><span class="avatar" style="background:var(--sage)">咨</span>健康咨询</span>
+          <span class="agent-chip"><span class="avatar" style="background:var(--wood-deep)">诊</span>症状诊断</span>
+          <span class="agent-chip"><span class="avatar" style="background:var(--mist)">研</span>医学研究</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-top:18px">
+          <span class="status"><i style="border:1.5px solid var(--gray);background:transparent"></i>待认领</span>
+          <span class="status"><i style="background:var(--sage)"></i>执行中</span>
+          <span class="status"><i style="background:var(--moss)"></i>已完成</span>
+          <span class="status"><i style="background:var(--rust)"></i>失败</span>
+          <div class="alert-bar">警示条：高危症状请立即就医（AutoFixer 自动附加）</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 高保真 mockup -->
+  <section id="mockups">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">05</span><span class="sec-line"></span></div>
+      <h2>高保真界面预览</h2>
+      <p class="lede">以下 mockup 直接按「清新自然」令牌静态渲染。文案与数字均为贴合项目真实字段的<strong>示意样例</strong>，不代表真实患者记录。</p>
+
+      <!-- 工作台 -->
+      <h3 class="mt-32">对话工作台<span class="demo-tag">示意数据</span></h3>
+      <div class="browser">
+        <div class="chrome">
+          <div class="traffic"><span style="background:var(--clay)"></span><span style="background:var(--wood)"></span><span style="background:var(--sage)"></span></div>
+          <div class="urlbar">medix.local/workbench</div>
+          <span style="width:40px"></span>
+        </div>
+        <div class="mock-nav">
+          <div class="logo">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M20.5 3.5C11.5 3.6 5.2 9 4.3 18.6c-.1.9.4 1.6 1.3 1.7 9.7.9 15-5.4 15-16.8Z" fill="#7C9A82"/>
+              <path d="M6.2 18.2C8 12.6 12 8.4 17.6 6.4" stroke="#F7F4EC" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+            MediX 智愈
+          </div>
+          <div class="mock-tabs">
+            <span class="on">对话工作台</span><span>仪表盘</span><span>会话记忆</span><span>知识库</span><span>安全质量</span>
+          </div>
+          <span style="flex:1"></span>
+          <span class="pill ghost" style="font-size:11px">会话 20260817-2136</span>
+        </div>
+        <div class="wb">
+          <div class="wb-chat">
+            <div class="time-center">今天 21:36</div>
+            <div class="bubble-user">我父亲 65 岁，有高血压和糖尿病史，最近经常头晕、乏力，晚上睡不好，应该怎么办？</div>
+            <div><span class="pill">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20.5 3.5C11.5 3.6 5.2 9 4.3 18.6c-.1.9.4 1.6 1.3 1.7 9.7.9 15-5.4 15-16.8Z" fill="#5F7F68"/>
+              </svg>
+              智能路由 · 群体协作模式 · 已分解 3 个子任务
+            </span></div>
+            <div class="answer">
+              <div class="answer-head">
+                <div class="avatars">
+                  <span class="avatar" style="background:var(--sage)">咨</span>
+                  <span class="avatar" style="background:var(--wood-deep)">诊</span>
+                  <span class="avatar" style="background:var(--mist)">研</span>
+                </div>
+                <span class="muted" style="font-size:12px">3 个专业 Agent 协作回答</span>
+                <span style="flex:1"></span>
+                <span class="mono muted" style="font-size:12px">24.8s</span>
+              </div>
+              <div class="alert-bar" style="font-weight:600">
+                重要提醒：老年人头晕若伴随胸痛、言语不清或一侧肢体无力，请立即就医。
+                <div style="font-weight:400;font-size:11px;margin-top:2px">该提醒由安全护栏（AutoFixer）自动附加</div>
+              </div>
+              <p style="font-size:13.5px">头晕乏力在高血压合并糖尿病的老年患者中，常与血压波动、夜间睡眠差或血糖控制不稳有关。建议先在家规律监测晨起与睡前血压、空腹血糖，并记录头晕发作的时间与诱因……</p>
+              <div>
+                <strong style="font-size:13.5px">【核心建议】</strong>
+                <p style="font-size:13px;margin-top:4px">1. 连续一周早晚测量血压并记录，就诊时供医生参考；</p>
+                <p style="font-size:13px">2. 排查夜间睡眠问题（如打鼾憋醒），必要时做睡眠监测；</p>
+                <p style="font-size:13px">3. 一周内前往心内科或老年科门诊做系统评估。</p>
+              </div>
+              <div class="pills">
+                <span class="pill wood">依据 · 《中国高血压防治指南》</span>
+                <span class="pill wood">知识库 · 语义检索 2 条</span>
+                <span class="pill wood">相似历史案例 · Mem0 ×2</span>
+              </div>
+              <div style="border-top:1px solid var(--line);padding-top:8px">
+                <p class="muted" style="font-size:11.5px">以上分析基于多个专业 Agent 的协作，仅供参考，不能替代医生诊断。</p>
+              </div>
+            </div>
+            <div class="composer">
+              <span>继续追问，例如：晚上睡不好和血压有关系吗？</span>
+              <span class="send">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M6 10V2M6 2 2.5 5.5M6 2l3.5 3.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <aside class="wb-side">
+            <div style="display:flex;align-items:center">
+              <strong style="font-family:var(--font-serif);font-size:15px">协作过程</strong>
+              <span style="flex:1"></span>
+              <span class="pill" style="font-size:11px">进行中</span>
+            </div>
+            <div class="tl">
+              <div class="tl-item">
+                <div class="tl-rail"><span class="tl-dot done"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 4.8 9.2 10 3.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="tl-stem"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">任务分解 <span class="pill ghost" style="font-size:10px">LeadAgent</span><span style="flex:1"></span><span class="mono muted" style="font-size:11px;font-weight:400">0.6s</span></div>
+                  <div class="tl-desc">识别为复杂问题，发布 3 个子任务</div>
+                </div>
+              </div>
+              <div class="tl-item">
+                <div class="tl-rail"><span class="tl-dot done"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 4.8 9.2 10 3.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="tl-stem"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">健康咨询 <span class="pill ghost" style="font-size:10px">ConsultationAgent</span><span style="flex:1"></span><span class="mono muted" style="font-size:11px;font-weight:400">12.4s</span></div>
+                  <div class="tl-desc">生活方式与随访建议已产出</div>
+                  <div class="pills mt-8"><span class="pill ghost mono" style="font-size:10px">search_knowledge</span><span class="pill ghost mono" style="font-size:10px">recommend_lifestyle</span></div>
+                </div>
+              </div>
+              <div class="tl-item">
+                <div class="tl-rail"><span class="tl-dot done"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 4.8 9.2 10 3.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="tl-stem"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">症状诊断 <span class="pill ghost" style="font-size:10px">DiagnosticAgent</span><span style="flex:1"></span><span class="mono muted" style="font-size:11px;font-weight:400">15.2s</span></div>
+                  <div class="tl-desc">风险评估完成：中危，建议一周内就诊</div>
+                  <div class="pills mt-8"><span class="pill ghost mono" style="font-size:10px">assess_risk</span><span class="pill ghost mono" style="font-size:10px">disease_code</span></div>
+                </div>
+              </div>
+              <div class="tl-item">
+                <div class="tl-rail"><span class="tl-dot run"><span style="width:5px;height:5px;border-radius:999px;background:#fff;display:block"></span></span><span class="tl-stem"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">医学研究 <span class="pill ghost" style="font-size:10px">ResearchAgent</span><span style="flex:1"></span><span class="mono muted" style="font-size:11px;font-weight:400">18.1s</span></div>
+                  <div class="tl-desc">正在检索临床指南……</div>
+                  <div class="pills mt-8"><span class="pill ghost mono" style="font-size:10px">clinical_guideline</span></div>
+                </div>
+              </div>
+              <div class="tl-item last">
+                <div class="tl-rail"><span class="tl-dot wait"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">结果汇总 <span class="pill ghost" style="font-size:10px">LeadAgent</span></div>
+                  <div class="tl-desc">等待全部子任务完成</div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="muted" style="font-size:12px;font-weight:600;margin-bottom:6px">事件流（SharedContext → SSE）</div>
+              <div class="event-box">
+                <div class="event-row"><span class="ts">21:36:02</span><span class="ev">swarm_started</span></div>
+                <div class="event-row"><span class="ts">21:36:03</span><span class="ev">task_decomposed ×3</span></div>
+                <div class="event-row"><span class="ts">21:36:03</span><span class="ev">subtask_started ×3</span></div>
+                <div class="event-row"><span class="ts">21:36:15</span><span class="ev">subtask_completed · consultation</span></div>
+                <div class="event-row"><span class="ts">21:36:18</span><span class="ev">subtask_completed · diagnostic</span></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <p class="caption">Mockup 1 · 对话工作台（核心页）：左侧对话流，右侧 Agent 协作实时面板。示意问题为复杂咨询，触发 Swarm 模式。</p>
+
+      <!-- 仪表盘 -->
+      <h3 class="mt-32">总览仪表盘<span class="demo-tag">示意数据</span></h3>
+      <div class="browser">
+        <div class="chrome">
+          <div class="traffic"><span style="background:var(--clay)"></span><span style="background:var(--wood)"></span><span style="background:var(--sage)"></span></div>
+          <div class="urlbar">medix.local/dashboard</div>
+          <span style="width:40px"></span>
+        </div>
+        <div class="mock-nav">
+          <div class="logo">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M20.5 3.5C11.5 3.6 5.2 9 4.3 18.6c-.1.9.4 1.6 1.3 1.7 9.7.9 15-5.4 15-16.8Z" fill="#7C9A82"/>
+              <path d="M6.2 18.2C8 12.6 12 8.4 17.6 6.4" stroke="#F7F4EC" stroke-width="1.1" stroke-linecap="round"/>
+            </svg>
+            MediX 智愈
+          </div>
+          <div class="mock-tabs">
+            <span>对话工作台</span><span class="on">仪表盘</span><span>会话记忆</span><span>知识库</span><span>安全质量</span>
+          </div>
+        </div>
+        <div class="dash">
+          <div class="grid-4">
+            <div class="card kpi"><div class="k">今日会话</div><div class="n">12</div><div class="s">本周累计 86</div></div>
+            <div class="card kpi"><div class="k">Swarm 协作占比</div><div class="n">41%</div><div class="s">其余为单 Agent 快速应答</div></div>
+            <div class="card kpi"><div class="k">平均响应耗时</div><div class="n">18.6s</div><div class="s">Swarm 32.4s · 单 Agent 9.8s</div></div>
+            <div class="card kpi"><div class="k">安全自动修复</div><div class="n">7 次</div><div class="s">免责声明 5 · 就医提醒 2</div></div>
+          </div>
+          <div class="grid-2">
+            <div class="card chart-card">
+              <strong style="font-size:13px">近 7 天会话量（次）</strong>
+              <div class="bars">
+                <div class="bar-col"><span class="bar-v">8</span><div class="bar" style="height:42%"></div><span class="bar-d">周一</span></div>
+                <div class="bar-col"><span class="bar-v">12</span><div class="bar" style="height:64%"></div><span class="bar-d">周二</span></div>
+                <div class="bar-col"><span class="bar-v">9</span><div class="bar" style="height:48%"></div><span class="bar-d">周三</span></div>
+                <div class="bar-col"><span class="bar-v">15</span><div class="bar peak" style="height:80%"></div><span class="bar-d">周四</span></div>
+                <div class="bar-col"><span class="bar-v">11</span><div class="bar" style="height:58%"></div><span class="bar-d">周五</span></div>
+                <div class="bar-col"><span class="bar-v">6</span><div class="bar" style="height:32%"></div><span class="bar-d">周六</span></div>
+                <div class="bar-col"><span class="bar-v">12</span><div class="bar" style="height:64%"></div><span class="bar-d">周日</span></div>
+              </div>
+              <p class="caption" style="margin-top:4px">横轴：日期 · 纵轴：会话次数 · 示意数据</p>
+            </div>
+            <div class="card chart-card">
+              <strong style="font-size:13px">路由模式分布（本周）</strong>
+              <div class="mt-16">
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span class="muted">单 Agent 快速应答</span><span class="mono">59%</span></div>
+                <div class="meter"><i style="width:59%;background:var(--sage)"></i></div>
+              </div>
+              <div class="mt-16">
+                <div style="display:flex;justify-content:space-between;font-size:12.5px"><span class="muted">Swarm 多 Agent 协作</span><span class="mono">41%</span></div>
+                <div class="meter"><i style="width:41%;background:var(--wood-deep)"></i></div>
+              </div>
+              <p class="caption">路由由 LeadAgent 任务分解结果决定 · 示意数据</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Mockup 2 · 总览仪表盘：运行统计、模式占比与安全修复概况（图中均为示意数据）。</p>
+
+      <div class="grid-2 mt-32">
+        <!-- 会话记忆 -->
+        <div>
+          <h3>会话记忆<span class="demo-tag">示意数据</span></h3>
+          <div class="browser">
+            <div class="chrome">
+              <div class="traffic"><span style="background:var(--clay)"></span><span style="background:var(--wood)"></span><span style="background:var(--sage)"></span></div>
+              <div class="urlbar">medix.local/memory</div>
+              <span style="width:24px"></span>
+            </div>
+            <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+              <strong style="font-family:var(--font-serif);font-size:16px">会话与记忆</strong>
+              <div class="card mem-list">
+                <div class="row-item">
+                  <span class="mono muted" style="font-size:11px;flex-shrink:0">08-17 21:36</span>
+                  <span class="q">父亲头晕乏力，高血压糖尿病史……</span>
+                  <span class="pill" style="font-size:10px">Swarm</span>
+                  <span class="mono muted" style="font-size:11px">24.8s</span>
+                </div>
+                <div class="row-item">
+                  <span class="mono muted" style="font-size:11px;flex-shrink:0">08-17 19:02</span>
+                  <span class="q">多喝水对健康有什么好处？</span>
+                  <span class="pill ghost" style="font-size:10px">单 Agent</span>
+                  <span class="mono muted" style="font-size:11px">9.7s</span>
+                </div>
+                <div class="row-item">
+                  <span class="mono muted" style="font-size:11px;flex-shrink:0">08-16 10:24</span>
+                  <span class="q">高血压患者的饮食建议</span>
+                  <span class="pill ghost" style="font-size:10px">单 Agent</span>
+                  <span class="mono muted" style="font-size:11px">11.2s</span>
+                </div>
+              </div>
+              <div class="muted" style="font-size:12px;font-weight:600">相似历史案例（Mem0 长期记忆）</div>
+              <div class="card" style="padding:9px 12px;display:flex;align-items:center;gap:10px">
+                <span class="pill wood" style="font-size:10px">相似度 0.82</span>
+                <span style="font-size:12.5px">高血压患者头晕随访建议：晨起测压、排查体位性低血压</span>
+              </div>
+              <div class="card" style="padding:9px 12px;display:flex;align-items:center;gap:10px">
+                <span class="pill wood" style="font-size:10px">相似度 0.76</span>
+                <span style="font-size:12.5px">老年糖尿病患者乏力咨询：关注夜间低血糖与睡眠质量</span>
+              </div>
+            </div>
+          </div>
+          <p class="caption">Mockup 3 · 历史会话回看 + Mem0 长期记忆相似案例。</p>
+        </div>
+
+        <!-- 安全质量 -->
+        <div>
+          <h3>安全质量<span class="demo-tag">示意数据</span></h3>
+          <div class="browser">
+            <div class="chrome">
+              <div class="traffic"><span style="background:var(--clay)"></span><span style="background:var(--wood)"></span><span style="background:var(--sage)"></span></div>
+              <div class="urlbar">medix.local/safety</div>
+              <span style="width:24px"></span>
+            </div>
+            <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+              <strong style="font-family:var(--font-serif);font-size:16px">安全与质量</strong>
+              <div class="grid-2" style="gap:8px">
+                <div class="card kpi"><div class="k">测试套件通过</div><div class="n">24 / 26</div></div>
+                <div class="card kpi"><div class="k">安全断言通过</div><div class="n">100%</div></div>
+              </div>
+              <div class="muted" style="font-size:12px;font-weight:600">AutoFixer 修复记录</div>
+              <div class="card fix-list">
+                <div class="row-item">
+                  <span class="mono muted" style="font-size:11px">21:36</span>
+                  <span class="pill clay" style="font-size:10px">就医提醒</span>
+                  <span style="font-size:12.5px">检出高危关键词「头晕」，自动附加急诊提示</span>
+                </div>
+                <div class="row-item">
+                  <span class="mono muted" style="font-size:11px">19:03</span>
+                  <span class="pill" style="font-size:10px">免责声明</span>
+                  <span style="font-size:12.5px">输出缺少免责声明，已自动补全</span>
+                </div>
+                <div class="row-item">
+                  <span class="mono muted" style="font-size:11px">10:25</span>
+                  <span class="pill" style="font-size:10px">免责声明</span>
+                  <span style="font-size:12.5px">输出缺少免责声明，已自动补全</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="caption">Mockup 4 · 约束验证与 AutoFixer 修复日志、测试结果。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 架构 -->
+  <section id="arch">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">06</span><span class="sec-line"></span></div>
+      <h2>架构与数据流</h2>
+      <p class="lede">原则：不改造现有核心，只在其上加一层薄服务。鼠尾草描边为本方案新增组件，灰色为项目现有组件（复用）。</p>
+      <div class="pills mt-16">
+        <span class="pill">新增</span>
+        <span class="pill ghost">现有（复用）</span>
+      </div>
+
+      <div class="mt-24" style="display:flex;flex-direction:column;gap:0">
+        <div class="layer new">
+          <div class="layer-h"><strong>浏览器 · React + Vite SPA</strong><span class="pill">新增</span></div>
+          <div class="chips">
+            <span class="nchip new">对话工作台</span>
+            <span class="nchip new">Agent 协作时间线</span>
+            <span class="nchip new">仪表盘</span>
+            <span class="nchip new">会话记忆</span>
+            <span class="nchip new">知识库</span>
+            <span class="nchip new">安全质量</span>
+          </div>
+        </div>
+        <div class="flow-down">
+          <span>↓ POST /chat（提问）</span>
+          <span>↓ SSE 事件流（过程 + 流式答案）</span>
+          <span>↓ REST（历史 / 检索 / 报告）</span>
+        </div>
+        <div class="layer new">
+          <div class="layer-h"><strong>FastAPI 服务层</strong><span class="pill">新增</span></div>
+          <div class="chips">
+            <span class="nchip new">/chat · SSE 响应</span>
+            <span class="nchip new">EventBus 桥接器：订阅 SharedContext 事件 → SSE 帧</span>
+            <span class="nchip new">Coordinator 单例（lifespan 管理）</span>
+            <span class="nchip new">/sessions /kb/search /reports</span>
+          </div>
+        </div>
+        <div class="flow-down"><span>↓ 进程内调用（await coordinator.process）</span></div>
+        <div class="layer">
+          <div class="layer-h"><strong>现有核心 · medix-agent-swarm</strong><span class="pill ghost">复用，仅微改</span></div>
+          <div class="chips">
+            <span class="nchip">SwarmCoordinator 智能路由</span>
+            <span class="nchip">LeadAgent 分解 / 汇总</span>
+            <span class="nchip">ConsultationAgent</span>
+            <span class="nchip">DiagnosticAgent</span>
+            <span class="nchip">ResearchAgent</span>
+            <span class="nchip">events.py · 8 种事件（由「只写不读」被激活）</span>
+            <span class="nchip">AgentLoop + 9 个 Skills</span>
+            <span class="nchip">ConstraintValidator + AutoFixer</span>
+          </div>
+        </div>
+        <div class="flow-down"><span>↓ 检索 / 读写</span></div>
+        <div class="layer">
+          <div class="layer-h"><strong>数据层</strong><span class="pill ghost">现有</span></div>
+          <div class="chips">
+            <span class="nchip">Milvus Lite 知识库</span>
+            <span class="nchip">Mem0 长期记忆</span>
+            <span class="nchip">短期记忆（内存 / Redis）</span>
+            <span class="nchip">SessionSummary 文件</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="mt-32">运行数据 → 界面映射</h3>
+      <p class="lede" style="margin-bottom:16px">UI 的全部数据源均已存在于代码中。</p>
+      <table class="data">
+        <thead><tr><th>运行数据 / 事件</th><th>来源（现有代码）</th><th>界面呈现</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">swarm_started / completed</td><td>swarm/events.py</td><td>协作面板启停状态、总耗时徽标</td></tr>
+          <tr><td class="mono">task_decomposed</td><td>LeadAgent → SharedContext</td><td>时间线「任务分解」节点 + 子任务数提示条</td></tr>
+          <tr><td class="mono">subtask_started / completed</td><td>SharedContext.publish_event</td><td>Agent 节点状态流转（灰→绿→深绿）与耗时</td></tr>
+          <tr><td>SubTask.status（5 态）</td><td>swarm/shared_context.py</td><td>状态圆点：待认领 / 执行中 / 完成 / 失败（+超时）</td></tr>
+          <tr><td>Skill 调用记录</td><td>core/agent_loop.py</td><td>节点下的等宽 Skill 标签逐个亮起</td></tr>
+          <tr><td>answer / suggestions / disclaimer</td><td>SwarmCoordinator.process</td><td>答案卡、核心建议列表、免责声明脚注</td></tr>
+          <tr><td>AutoFixer 修复动作</td><td>validation/auto_fixer.py</td><td>陶土色警示条 +「自动附加」标记；安全质量页日志</td></tr>
+          <tr><td>Mem0 相似案例</td><td>memory/long_term.py</td><td>会话记忆页「相似历史案例」卡片</td></tr>
+          <tr><td>Milvus 检索结果</td><td>knowledge/milvus_kb.py</td><td>答案来源标签、知识库页检索调试台</td></tr>
+          <tr><td class="mono">timeout_occurred</td><td>SwarmCoordinator 返回值</td><td>超时兜底提示、参与 Agent 头像组</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout ok mt-24">
+        <span class="dot-mark" style="background:var(--moss)"></span>
+        <div>
+          <h4>需要的后端微改（不动核心逻辑）</h4>
+          <p>
+            ① SharedContext 增加事件订阅回调（约 10 行），供 EventBus 转发；
+            ② LLMClient 增加 stream=True 支持答案逐字流出；
+            ③ AgentLoop 的 Skill 调用处补发一个轻量事件（当前仅存于中间结果）。
+            均为 IMPROVEMENT_PLAN P1-1 已列出的改动。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 交互流程 -->
+  <section id="flow">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">07</span><span class="sec-line"></span></div>
+      <h2>关键交互流程</h2>
+      <p class="lede">一次完整咨询，从进入工作台到追问回看。每一步都对应现有后端字段。</p>
+      <div class="steps mt-24">
+        <article class="card step">
+          <div class="sn">STEP 01</div>
+          <h4>进入</h4>
+          <p>工作台首页：输入框 + 示例问题卡</p>
+          <div class="mech">创建 session_id<br>加载短期记忆</div>
+        </article>
+        <article class="card step">
+          <div class="sn">STEP 02</div>
+          <h4>提问</h4>
+          <p>问题以鼠尾草绿气泡送出，出现「智能路由中」微动效</p>
+          <div class="mech">LeadAgent<br>assess_and_decompose</div>
+        </article>
+        <article class="card step">
+          <div class="sn">STEP 03</div>
+          <h4>路由反馈</h4>
+          <p>浅绿提示条：「单 Agent 快速应答」或「群体协作 · N 个子任务」</p>
+          <div class="mech">subtasks 数量决定模式<br>swarm_enabled</div>
+        </article>
+        <article class="card step">
+          <div class="sn">STEP 04</div>
+          <h4>过程可视</h4>
+          <p>右侧时间线：各 Agent 节点由灰→绿→深绿流转，Skill 标签逐个亮起</p>
+          <div class="mech">SharedContext 事件<br>经 SSE 推送</div>
+        </article>
+        <article class="card step">
+          <div class="sn">STEP 05</div>
+          <h4>答案呈现</h4>
+          <p>答案逐字流出；核心建议、来源标签、陶土色安全提示、免责声明依次出现</p>
+          <div class="mech">LLM stream + AutoFixer<br>修复结果随流附带</div>
+        </article>
+        <article class="card step">
+          <div class="sn">STEP 06</div>
+          <h4>追问 / 回看</h4>
+          <p>继续追问延续上下文；会话可在「会话记忆」页回放时间线</p>
+          <div class="mech">短期记忆<br>+ SessionSummary</div>
+        </article>
+      </div>
+      <div class="callout warn mt-24">
+        <span class="dot-mark" style="background:var(--clay)"></span>
+        <div>
+          <h4>超时兜底</h4>
+          <p>
+            Swarm 有 90 秒超时（代码现状）：时间线上未完成的 Agent 节点转为「超时」态（赭红空心点），
+            答案区明示「基于 N 个 Agent 的部分结果」，与现有 <span class="mono">timeout_occurred</span> 字段一一对应。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 实施计划 -->
+  <section id="plan">
+    <div class="wrap">
+      <div class="sec-kicker"><span class="sec-num">08</span><span class="sec-line"></span></div>
+      <h2>分阶段实施计划 M0–M4</h2>
+      <p class="lede">约 4–5 周，可随时在里程碑处停下交付。每个里程碑均可独立演示；M1 完成后即使没有前端，也能用 curl 看到完整事件流。</p>
+
+      <div class="ms mt-24">
+        <div class="ms-item">
+          <div class="ms-dot-col"><div class="ms-dot">M0</div></div>
+          <article class="card ms-card">
+            <h4>M0 · 设计冻结</h4>
+            <div class="ms-meta">周期 0.5 天</div>
+            <p>确认本方案配色 / 页面 / 事件字段协议（SSE 帧格式）。</p>
+            <div class="ms-acc">验收：事件协议文档定稿</div>
+          </article>
+        </div>
+        <div class="ms-item">
+          <div class="ms-dot-col"><div class="ms-dot">M1</div></div>
+          <article class="card ms-card">
+            <h4>M1 · 后端服务化</h4>
+            <div class="ms-meta">约 1 周</div>
+            <p>FastAPI 应用 + POST /chat（SSE）；EventBus 桥接 SharedContext 事件；Coordinator 单例化；LLM 流式输出。</p>
+            <div class="ms-acc">验收：curl 能收到 task_decomposed → subtask_* → 答案分片的完整事件流</div>
+          </article>
+        </div>
+        <div class="ms-item">
+          <div class="ms-dot-col"><div class="ms-dot" style="background:var(--sage);color:#fff;border-color:var(--moss)">M2</div></div>
+          <article class="card ms-card" style="border-color:var(--sage)">
+            <h4>M2 · 对话工作台 MVP</h4>
+            <div class="ms-meta">约 1 周 · 演示价值最高</div>
+            <p>React 工程 +「清新自然」主题令牌落地；对话流 + Agent 协作时间线 + 路由提示 + 安全标记。</p>
+            <div class="ms-acc">验收：一次 Swarm 咨询全程可视，超时兜底正确显示</div>
+          </article>
+        </div>
+        <div class="ms-item">
+          <div class="ms-dot-col"><div class="ms-dot">M3</div></div>
+          <article class="card ms-card">
+            <h4>M3 · 仪表盘 + 会话记忆</h4>
+            <div class="ms-meta">约 1 周</div>
+            <p>运行统计聚合接口与仪表盘页；会话列表 / 回放、Mem0 相似案例展示（建议先落地 P0-2 token 统计）。</p>
+            <div class="ms-acc">验收：仪表盘数据与日志一致；历史会话可回看时间线</div>
+          </article>
+        </div>
+        <div class="ms-item">
+          <div class="ms-dot-col"><div class="ms-dot">M4</div></div>
+          <article class="card ms-card">
+            <h4>M4 · 知识库 + 安全质量 + 打磨</h4>
+            <div class="ms-meta">约 1 周</div>
+            <p>Milvus 检索调试台；违规 / 修复日志页；响应式适配、动效与空态打磨。</p>
+            <div class="ms-acc">验收：五个页面完整可用，演示脚本跑通</div>
+          </article>
+        </div>
+      </div>
+
+      <div class="grid-2 mt-16">
+        <article class="card" style="padding:20px 22px">
+          <h3>依赖与顺序建议</h3>
+          <p class="muted" style="font-size:13.5px;margin-bottom:8px">· M1 前建议先修 IMPROVEMENT_PLAN 中的 Bug 7（同步调用阻塞事件循环），否则 SSE 推送会被 embedding / Mem0 调用卡顿。</p>
+          <p class="muted" style="font-size:13.5px;margin-bottom:8px">· 仪表盘的 token / 成本卡依赖 P0-2（usage 统计），可与 M3 并行完成。</p>
+          <p class="muted" style="font-size:13.5px">· Milvus 分数展示前建议先修 Bug 2（COSINE 分数语义颠倒），避免界面放大错误信息。</p>
+        </article>
+        <article class="card" style="padding:20px 22px">
+          <h3>主要风险与缓解</h3>
+          <p class="muted" style="font-size:13.5px;margin-bottom:8px">· 复杂问题耗时 30–90s：以过程时间线 + 流式答案化解等待焦虑（本方案核心价值）。</p>
+          <p class="muted" style="font-size:13.5px;margin-bottom:8px">· LLM 路由波动导致演示不稳定：配合 P0-1 路由确定性改造，UI 上明示路由理由。</p>
+          <p class="muted" style="font-size:13.5px">· Windows 开发环境：全栈本地可跑（Milvus Lite 文件库 + Vite dev server），无容器依赖。</p>
+        </article>
+      </div>
+
+      <footer class="page-foot">
+        <span>MediX 智愈 · 可视化界面设计方案 · 清新自然</span>
+        <span>仅为设计提案，不含实现代码 · 页面数据均为示意 · 2026-08-17</span>
+      </footer>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var links = document.querySelectorAll(".nav-links a");
+      var ids = [];
+      for (var i = 0; i < links.length; i++) {
+        var href = links[i].getAttribute("href");
+        if (href && href.charAt(0) === "#") ids.push(href.slice(1));
+      }
+      var sections = ids.map(function (id) { return document.getElementById(id); }).filter(Boolean);
+      function setActive(id) {
+        for (var j = 0; j < links.length; j++) {
+          links[j].classList.toggle("active", links[j].getAttribute("href") === "#" + id);
+        }
+      }
+      if ("IntersectionObserver" in window) {
+        var io = new IntersectionObserver(function (entries) {
+          var vis = entries.filter(function (e) { return e.isIntersecting; });
+          if (!vis.length) return;
+          vis.sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; });
+          setActive(vis[0].target.id);
+        }, { rootMargin: "-20% 0px -60% 0px", threshold: [0.1, 0.3, 0.6] });
+        sections.forEach(function (s) { io.observe(s); });
+      }
+      setActive("cover");
+    })();
+  </script>
+</body>
+</html>

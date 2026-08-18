@@ -2,7 +2,7 @@
 记忆系统：Agent 的持久化学习和记忆管理
 
 包含：
-- ShortTermMemory：会话级对话历史（内存/Redis）
+- ShortTermMemory：会话级对话历史（默认 Redis，连不上则内存）
 - LongTermMemory：跨会话记忆（Mem0）
 - MemoryEntropyManager：熵管理器（去重和压缩）
 """

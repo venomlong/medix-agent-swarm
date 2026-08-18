@@ -125,6 +125,14 @@ python examples/test_all.py
 python main.py
 ```
 
+Web 工作台（先起后端 :8000，再起前端）：
+
+```bash
+python -m uvicorn webapi.app:app --host 127.0.0.1 --port 8000
+```
+
+然后在 `web/` 执行 `npm run dev`（详见 `web/README.md`）。
+
 ## 📦 项目结构
 
 ```
@@ -710,5 +718,21 @@ MIT License
 - 基于 [MediX-R1](https://github.com/...) 医学多模态模型
 - 使用 [LLM API](https://www.volcengine.com/) 作为LLM后端
 - 记忆管理基于 [Mem0](https://mem0.ai/)
+
+---
+
+## 可视化界面
+
+Web 工作台（Vite + React），对接 `webapi` 的 SSE 对话与协作过程可视化。设计方案见 [`docs/ui-design-proposal.html`](docs/ui-design-proposal.html)。
+
+```bash
+# 终端 1：后端
+python -m uvicorn webapi.app:app --host 127.0.0.1 --port 8000
+
+# 终端 2：前端
+cd web && npm install && npm run dev
+```
+
+浏览器打开 http://localhost:5173 。离线演示可设 `VITE_USE_MOCK=true`。详见 [web/README.md](web/README.md)。
 
 ---

@@ -16,7 +16,53 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import json
+import re
 from loguru import logger
+
+
+def _section(text: str, heading: str) -> str:
+    pattern = rf"^## {re.escape(heading)}\s*\n(.*?)(?=^## |\Z)"
+    m = re.search(pattern, text, flags=re.M | re.S)
+    return (m.group(1).strip() if m else "").strip()
+
+
+def _parse_summary_markdown(session_id: str, text: str, mtime: float) -> Dict[str, Any]:
+    time_m = re.search(r"\*\*时间\*\*:\s*(.+)", text)
+    time_raw = (time_m.group(1).strip() if time_m else "")
+    time_label = time_raw
+    try:
+        dt = datetime.strptime(time_raw, "%Y-%m-%d %H:%M:%S")
+        time_label = dt.strftime("%m-%d %H:%M")
+    except ValueError:
+        if mtime:
+            time_label = datetime.fromtimestamp(mtime).strftime("%m-%d %H:%M")
+
+    question = _section(text, "问题").split("\n", 1)[0].strip()
+    answer = _section(text, "最终答案")
+    elapsed_m = re.search(r"总耗时：([\d.]+)\s*秒", text)
+    agents_m = re.search(r"参与 Agent：(\d+)", text)
+    subtasks_m = re.search(r"创建子任务：(\d+)", text)
+    elapsed_s = float(elapsed_m.group(1)) if elapsed_m else None
+    agent_count = int(agents_m.group(1)) if agents_m else 0
+    subtasks = int(subtasks_m.group(1)) if subtasks_m else 0
+    mode = "Swarm" if subtasks >= 2 or agent_count >= 2 else "单 Agent"
+    summary = re.sub(r"\s+", " ", answer)[:120].strip()
+    if len(answer) > 120:
+        summary += "…"
+    if not summary:
+        summary = "（无最终答案摘要）"
+
+    return {
+        "id": session_id,
+        "time": time_label,
+        "question": question or session_id,
+        "mode": mode,
+        "elapsed": f"{elapsed_s:.1f}s" if elapsed_s is not None else "—",
+        "elapsed_s": elapsed_s,
+        "summary": summary,
+        "agent_count": agent_count,
+        "subtasks_created": subtasks,
+    }
 
 
 @dataclass
@@ -295,6 +341,51 @@ class SessionSummaryManager:
         except Exception as e:
             logger.error(f"Error loading session summary: {e}")
             return None
+
+    def _resolve_path(self, session_id: str) -> Optional[Path]:
+        """查找已有 markdown，不创建目录。"""
+        expected = self.base_dir / (session_id.split("-")[0] if "-" in session_id else "unknown") / f"{session_id}.md"
+        if expected.exists():
+            return expected
+        matches = list(self.base_dir.rglob(f"{session_id}.md"))
+        return matches[0] if matches else None
+
+    def read_markdown(self, session_id: str) -> Optional[str]:
+        path = self._resolve_path(session_id)
+        if path is None:
+            return None
+        try:
+            return path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Error reading session summary: {e}")
+            return None
+
+    def parse_markdown_file(self, path: Path) -> Optional[Dict[str, Any]]:
+        """从已保存的 Markdown 抽出列表/详情所需字段（不假装有结构化库）。"""
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Error parsing session summary {path}: {e}")
+            return None
+        return _parse_summary_markdown(path.stem, text, path.stat().st_mtime)
+
+    def list_summaries(self, limit: int = 40) -> List[Dict[str, Any]]:
+        if not self.base_dir.exists():
+            return []
+        files = [
+            p
+            for p in self.base_dir.rglob("*.md")
+            if p.parent.name != "test" and not p.stem.startswith("test")
+        ]
+        files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        items: List[Dict[str, Any]] = []
+        for path in files:
+            parsed = self.parse_markdown_file(path)
+            if parsed:
+                items.append(parsed)
+            if len(items) >= limit:
+                break
+        return items
 
     def search_similar_sessions(
         self,

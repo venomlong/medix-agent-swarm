@@ -7,7 +7,7 @@ import os
 import sys
 import asyncio
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
 from openai import AsyncOpenAI
 from loguru import logger
@@ -67,6 +67,8 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        stream: bool = False,
+        on_delta: Optional[Callable[[str], None]] = None,
         **kwargs
     ) -> str:
         """
@@ -76,17 +78,39 @@ class LLMClient:
             messages: 消息列表，格式为 [{"role": "user", "content": "..."}]
             temperature: 温度参数（可选）
             max_tokens: 最大token数（可选）
+            stream: 是否流式；失败时自动回退为非流式
+            on_delta: 每个文本增量的回调（仅 stream=True 时使用）
 
         Returns:
             模型返回的文本
         """
+        stream = bool(stream or kwargs.pop("stream", False))
+        on_delta = on_delta or kwargs.pop("on_delta", None)
+        # 注意：不能用 `or`，否则 temperature=0 / max_tokens=0 会被短路成默认值
+        temperature = temperature if temperature is not None else self.temperature
+        max_tokens = max_tokens if max_tokens is not None else self.max_tokens
+
+        logger.debug(f"Calling LLM ({self.model_type}) with {len(messages)} messages")
+
+        if stream:
+            try:
+                streamed = await self._stream_completion(
+                    {
+                        "model": self.model_name,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        **kwargs,
+                    },
+                    on_delta=on_delta,
+                )
+                content = streamed.content or ""
+                logger.debug(f"LLM stream response length: {len(content)} chars")
+                return content
+            except Exception as e:
+                logger.warning(f"Streaming chat failed, falling back to non-stream: {e}")
+
         try:
-            # 注意：不能用 `or`，否则 temperature=0 / max_tokens=0 会被短路成默认值
-            temperature = temperature if temperature is not None else self.temperature
-            max_tokens = max_tokens if max_tokens is not None else self.max_tokens
-
-            logger.debug(f"Calling LLM ({self.model_type}) with {len(messages)} messages")
-
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
@@ -96,12 +120,82 @@ class LLMClient:
             )
 
             content = response.choices[0].message.content
-            logger.debug(f"LLM response length: {len(content)} chars")
+            logger.debug(f"LLM response length: {len(content) if content else 0} chars")
             return content
 
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise
+
+    async def _stream_completion(
+        self,
+        request_params: Dict[str, Any],
+        on_delta: Optional[Callable[[str], None]] = None,
+    ) -> LLMResponse:
+        """消费 chat.completions 流，拼出完整 LLMResponse；content 增量可回调。"""
+        stream = await self.client.chat.completions.create(
+            **request_params,
+            stream=True,
+        )
+        content_parts: List[str] = []
+        tool_acc: Dict[int, Dict[str, str]] = {}
+        finish_reason = "stop"
+        suppress_delta = False
+
+        async for chunk in stream:
+            if not getattr(chunk, "choices", None):
+                continue
+            choice = chunk.choices[0]
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason
+            delta = choice.delta
+            tool_calls = getattr(delta, "tool_calls", None)
+            if tool_calls:
+                suppress_delta = True
+                for tc in tool_calls:
+                    idx = int(getattr(tc, "index", 0) or 0)
+                    slot = tool_acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                    if getattr(tc, "id", None):
+                        slot["id"] = tc.id
+                    fn = getattr(tc, "function", None)
+                    if fn is not None:
+                        if getattr(fn, "name", None):
+                            slot["name"] += fn.name
+                        if getattr(fn, "arguments", None):
+                            slot["arguments"] += fn.arguments
+            piece = getattr(delta, "content", None) or ""
+            if piece:
+                content_parts.append(piece)
+                if on_delta and not suppress_delta:
+                    try:
+                        on_delta(piece)
+                    except Exception as cb_err:
+                        logger.debug(f"on_delta error: {cb_err}")
+
+        tool_calls_out: List[ToolCall] = []
+        for idx in sorted(tool_acc):
+            slot = tool_acc[idx]
+            raw = slot["arguments"] or "{}"
+            try:
+                args = json.loads(raw)
+                if not isinstance(args, dict):
+                    args = {"_raw": args}
+            except json.JSONDecodeError:
+                args = {"_raw": raw}
+            tool_calls_out.append(ToolCall(
+                id=slot["id"] or f"call_{idx}",
+                name=slot["name"] or "unknown",
+                arguments=args,
+            ))
+
+        if tool_calls_out and finish_reason == "stop":
+            finish_reason = "tool_calls"
+
+        return LLMResponse(
+            content="".join(content_parts) or None,
+            tool_calls=tool_calls_out,
+            finish_reason=finish_reason,
+        )
 
     async def chat_with_retry(
         self,
@@ -148,6 +242,8 @@ class LLMClient:
         tool_choice: str = "auto",
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        stream: bool = False,
+        on_delta: Optional[Callable[[str], None]] = None,
         **kwargs
     ) -> LLMResponse:
         """
@@ -159,32 +255,43 @@ class LLMClient:
             tool_choice: 工具选择策略 ("auto"/"required"/"none")
             temperature: 温度参数
             max_tokens: 最大token数
+            stream: 是否流式；若出现 tool_calls 则不把增量推给 on_delta
+            on_delta: 文本增量回调（最终答案路径使用）
 
         Returns:
             LLMResponse 对象
         """
+        stream = bool(stream or kwargs.pop("stream", False))
+        on_delta = on_delta or kwargs.pop("on_delta", None)
+        # 注意：不能用 `or`，否则 temperature=0 / max_tokens=0 会被短路成默认值
+        temperature = temperature if temperature is not None else self.temperature
+        max_tokens = max_tokens if max_tokens is not None else self.max_tokens
+
+        logger.debug(f"Calling LLM with {len(tools) if tools else 0} tools")
+
+        request_params = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            **kwargs
+        }
+
+        if tools:
+            request_params["tools"] = tools
+            if tool_choice != "auto":
+                request_params["tool_choice"] = tool_choice
+
+        if stream:
+            try:
+                streamed = await self._stream_completion(request_params, on_delta=on_delta)
+                if streamed.has_tool_calls():
+                    logger.debug(f"LLM streamed {len(streamed.tool_calls)} tool calls")
+                return streamed
+            except Exception as e:
+                logger.warning(f"Streaming chat_with_tools failed, falling back: {e}")
+
         try:
-            # 注意：不能用 `or`，否则 temperature=0 / max_tokens=0 会被短路成默认值
-            temperature = temperature if temperature is not None else self.temperature
-            max_tokens = max_tokens if max_tokens is not None else self.max_tokens
-
-            logger.debug(f"Calling LLM with {len(tools) if tools else 0} tools")
-
-            # 准备请求参数
-            request_params = {
-                "model": self.model_name,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                **kwargs
-            }
-
-            # 添加工具参数（如果提供）
-            if tools:
-                request_params["tools"] = tools
-                if tool_choice != "auto":
-                    request_params["tool_choice"] = tool_choice
-
             response = await self.client.chat.completions.create(**request_params)
 
             # 解析响应
@@ -195,10 +302,15 @@ class LLMClient:
             tool_calls = []
             if hasattr(message, 'tool_calls') and message.tool_calls:
                 for tc in message.tool_calls:
+                    raw_args = tc.function.arguments or "{}"
+                    try:
+                        parsed_args = json.loads(raw_args)
+                    except json.JSONDecodeError:
+                        parsed_args = {"_raw": raw_args}
                     tool_calls.append(ToolCall(
                         id=tc.id,
                         name=tc.function.name,
-                        arguments=json.loads(tc.function.arguments)
+                        arguments=parsed_args if isinstance(parsed_args, dict) else {"_raw": parsed_args}
                     ))
                 logger.debug(f"LLM requested {len(tool_calls)} tool calls")
 

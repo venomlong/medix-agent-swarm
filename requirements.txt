@@ -39,3 +39,8 @@ tqdm>=4.65.0
 # 异步支持
 aiohttp>=3.8.0
 httpx>=0.24.0
+
+# Web API（薄服务层，SSE）
+fastapi>=0.115.0,<0.117.0
+uvicorn[standard]>=0.32.0,<0.35.0
+python-multipart>=0.0.20

@@ -18,6 +18,8 @@ class EventType(Enum):
     AGENT_ANSWER = "agent_answer"                # Agent 回答问题
     SWARM_STARTED = "swarm_started"              # Swarm 开始处理
     SWARM_COMPLETED = "swarm_completed"          # Swarm 完成处理
+    SKILL_STARTED = "skill_started"              # Agent 开始调用 Skill
+    SKILL_COMPLETED = "skill_completed"          # Agent 完成一次 Skill 调用
 
 
 @dataclass

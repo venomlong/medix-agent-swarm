@@ -402,9 +402,18 @@ class LeadAgent:
 """
 
         try:
-            response = await self.llm_client.chat([
-                {"role": "user", "content": synthesis_prompt}
-            ])
+            on_delta = None
+            try:
+                from swarm.shared_context import get_answer_delta_listener
+                on_delta = get_answer_delta_listener()
+            except Exception:
+                on_delta = None
+
+            response = await self.llm_client.chat(
+                [{"role": "user", "content": synthesis_prompt}],
+                stream=on_delta is not None,
+                on_delta=on_delta,
+            )
 
             return response
 

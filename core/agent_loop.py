@@ -132,11 +132,15 @@ class AgentLoop:
 
                 try:
                     # 调用 LLM（可能返回 tool_calls）
+                    # 仅单 Agent（record_memory=True）且 webapi 挂了回调时流式，避免 Swarm Worker 文字交错
+                    on_delta = self._final_answer_delta_cb(record_memory)
                     llm_response: LLMResponse = await agent.llm_client.chat_with_tools(
                         messages=messages,
                         tools=tools_openai_format,
                         tool_choice="none" if force_final_answer else "auto",
-                        temperature=agent.config.get('temperature', 0.7)
+                        temperature=agent.config.get('temperature', 0.7),
+                        stream=on_delta is not None,
+                        on_delta=on_delta,
                     )
 
                     # 记录中间结果
@@ -181,6 +185,8 @@ class AgentLoop:
                             # 增加计数
                             self.tool_call_count += 1
                             logger.debug(f"Executing: {tool_call.name}({tool_call.arguments}) - 第 {self.tool_call_count} 次调用")
+                            self._emit_skill_event(agent, input_data, tool_call.name, started=True)
+                            skill_ok = True
 
                             try:
                                 # Harness Engineering: 验证调用
@@ -208,6 +214,7 @@ class AgentLoop:
                                 # Skill 执行/结果序列化失败也必须回填一条 tool 消息，
                                 # 否则 assistant(tool_calls) 缺少对应 tool 消息，
                                 # 下一次 LLM 请求会被 API 以协议违规拒绝（400）
+                                skill_ok = False
                                 logger.error(f"Tool execution failed: {tool_call.name} - {tool_error}")
                                 tool_message = agent.llm_client.create_tool_message(
                                     tool_call_id=tool_call.id,
@@ -217,6 +224,9 @@ class AgentLoop:
 
                             # 添加结果消息
                             messages.append(tool_message)
+                            self._emit_skill_event(
+                                agent, input_data, tool_call.name, started=False, ok=skill_ok
+                            )
 
                         # 继续下一轮循环
                         continue
@@ -302,10 +312,13 @@ class AgentLoop:
                     })
 
                     # 调用 LLM（禁用 function calling）
+                    on_delta = self._final_answer_delta_cb(record_memory)
                     final_response = await agent.llm_client.chat_with_tools(
                         messages=messages,
                         tools=None,
-                        temperature=0.7
+                        temperature=0.7,
+                        stream=on_delta is not None,
+                        on_delta=on_delta,
                     )
 
                     result = {
@@ -371,6 +384,48 @@ class AgentLoop:
         })
 
         return messages
+
+    def _final_answer_delta_cb(self, record_memory: bool):
+        """Swarm Worker 不把内部 LLM 增量推到 UI；仅单 Agent 最终可见回答流式。"""
+        if not record_memory:
+            return None
+        try:
+            from swarm.shared_context import get_answer_delta_listener
+            return get_answer_delta_listener()
+        except Exception:
+            return None
+
+    def _emit_skill_event(
+        self,
+        agent,
+        input_data: Dict[str, Any],
+        skill_name: str,
+        started: bool,
+        ok: bool = True,
+    ) -> None:
+        """轻量 Skill 事件：有 SharedContext 则广播，否则走 webapi 请求级 listener。"""
+        if not skill_name:
+            return
+        try:
+            from swarm.events import Event, EventType
+            from swarm.shared_context import emit_live_event
+        except ImportError:
+            return
+        data: Dict[str, Any] = {
+            "name": skill_name,
+            "skill_name": skill_name,
+            "agent": getattr(agent, "agent_id", ""),
+            "ok": ok,
+        }
+        subtask_id = (input_data or {}).get("subtask_id")
+        if subtask_id:
+            data["subtask_id"] = subtask_id
+        event = Event(
+            type=EventType.SKILL_STARTED if started else EventType.SKILL_COMPLETED,
+            source_agent=getattr(agent, "agent_id", "") or "unknown",
+            data=data,
+        )
+        emit_live_event(event, getattr(agent, "shared_context", None))
 
     def _create_assistant_message_with_tools(self, llm_response: LLMResponse) -> Dict[str, Any]:
         """创建包含 tool_calls 的 assistant 消息"""

@@ -7,8 +7,27 @@
 - 自动修复（在可能的情况下）
 - 保持 Agent 输出质量
 """
-from typing import Dict, Any, List
+from collections import deque
+from datetime import datetime
+from typing import Any, Dict, List
 from loguru import logger
+
+# 进程内修复记录（无持久库；webapi 安全页只展示本次启动后的动作）
+_FIX_LOG: deque = deque(maxlen=200)
+
+
+def get_fix_records() -> List[Dict[str, Any]]:
+    return list(_FIX_LOG)
+
+
+def _record_fix(kind: str, detail: str) -> None:
+    _FIX_LOG.append(
+        {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "kind": kind,
+            "detail": detail,
+        }
+    )
 
 
 class AutoFixer:
@@ -32,10 +51,15 @@ class AutoFixer:
         fixed_output = output
 
         for fix_type in auto_fixable:
+            before = fixed_output
             if fix_type == "add_disclaimer":
                 fixed_output = self.fix_missing_disclaimer(fixed_output)
+                if fixed_output != before:
+                    _record_fix("免责声明", "输出缺少免责声明，已自动补全")
             elif fix_type == "add_emergency_warning":
                 fixed_output = self.fix_high_risk_warning(fixed_output)
+                if fixed_output != before:
+                    _record_fix("就医提醒", "检出高危症状关键词且未建议就医，已自动附加提醒")
 
         if fixed_output != output:
             logger.info("🔧 输出已自动修复")

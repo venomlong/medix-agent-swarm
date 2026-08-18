@@ -7,14 +7,61 @@ SharedContext：Agent 群体智能的共享环境（信息素系统）
 
 这是去中心化协作的核心：没有中心控制节点，只有共享环境
 """
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import uuid
 from collections import defaultdict
 
+from loguru import logger
+
 from .events import Event, EventType
+
+# webapi SSE：当前请求的监听器；SharedContext 创建时自动挂上，不改 Coordinator
+_event_listener: ContextVar[Optional[Callable[[Event], None]]] = ContextVar(
+    "shared_context_event_listener", default=None
+)
+_answer_delta_listener: ContextVar[Optional[Callable[[str], None]]] = ContextVar(
+    "answer_delta_listener", default=None
+)
+
+
+def set_event_listener(listener: Optional[Callable[[Event], None]]):
+    """注册当前任务的事件回调（约供 webapi 订阅）。"""
+    return _event_listener.set(listener)
+
+
+def reset_event_listener(token) -> None:
+    _event_listener.reset(token)
+
+
+def set_answer_delta_listener(listener: Optional[Callable[[str], None]]):
+    """注册最终答案 token 回调（仅 webapi 路径设置；CLI 为 None）。"""
+    return _answer_delta_listener.set(listener)
+
+
+def reset_answer_delta_listener(token) -> None:
+    _answer_delta_listener.reset(token)
+
+
+def get_answer_delta_listener() -> Optional[Callable[[str], None]]:
+    return _answer_delta_listener.get()
+
+
+def emit_live_event(event: Event, shared_context: Optional[Any] = None) -> None:
+    """有 SharedContext 则走 publish；单 Agent 无 context 时直达请求级 listener。"""
+    if shared_context is not None and hasattr(shared_context, "publish_event"):
+        shared_context.publish_event(event)
+        return
+    listener = _event_listener.get()
+    if listener is None:
+        return
+    try:
+        listener(event)
+    except Exception as exc:
+        logger.debug(f"Live event listener error: {exc}")
 
 
 class TaskStatus(Enum):
@@ -117,6 +164,16 @@ class SharedContext:
         # 工作记忆池（临时数据）
         self.memory_pool: Dict[str, Any] = {}
 
+        # 可选订阅者（原 events list 仍保留；webapi 通过 ContextVar 自动挂上）
+        self._event_callbacks: List[Callable[[Event], None]] = []
+        inherited = _event_listener.get()
+        if inherited is not None:
+            self._event_callbacks.append(inherited)
+
+    def subscribe(self, callback: Callable[[Event], None]) -> None:
+        """订阅事件（不改变原 list 存储）。"""
+        self._event_callbacks.append(callback)
+
     def publish_event(self, event: Event):
         """
         发布事件
@@ -124,6 +181,11 @@ class SharedContext:
         Agent 通过发布事件来通知其他 Agent
         """
         self.events.append(event)
+        for callback in list(self._event_callbacks):
+            try:
+                callback(event)
+            except Exception as exc:
+                logger.debug(f"Event callback error: {exc}")
 
     def get_events(
         self,
