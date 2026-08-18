@@ -1,17 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AnswerCard } from "../components/AnswerCard";
 import { Composer } from "../components/Composer";
 import { EventStream } from "../components/EventStream";
 import { LeafLogo } from "../components/LeafLogo";
+import { SessionSidebar } from "../components/SessionSidebar";
 import { Timeline } from "../components/Timeline";
 import { TimeoutFallback } from "../components/TimeoutFallback";
-import { createSessionId, loadStoredSessionId, sendChat, storeSessionId, USE_MOCK } from "../api/client";
-import { DEFAULT_QUESTION, FOLLOWUP_HINT } from "../mock/data";
+import {
+  createSessionId,
+  deleteSession,
+  getSessionMessages,
+  getSessions,
+  loadStoredSessionId,
+  mapHistoryToChatMessages,
+  sendChat,
+  storeSessionId,
+  USE_MOCK,
+} from "../api/client";
+import { DEFAULT_QUESTION, FOLLOWUP_HINT, MEMORY_SESSIONS } from "../mock/data";
 import { simulateConsultation } from "../mock/simulate";
 import type {
   AnswerPayload,
   AnswerReveal,
   ChatMessage,
+  MemorySession,
   RoutingMode,
   StreamEvent,
   TimelineStep,
@@ -31,6 +44,8 @@ const EMPTY_REVEAL: AnswerReveal = {
 };
 
 export function Workbench() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSession = (searchParams.get("session") || "").trim();
   const [input, setInput] = useState(DEFAULT_QUESTION);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [routing, setRouting] = useState<RoutingMode>("idle");
@@ -38,13 +53,87 @@ export function Workbench() {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [running, setRunning] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [historyReady, setHistoryReady] = useState(USE_MOCK);
+  const [recentSessions, setRecentSessions] = useState<MemorySession[]>(
+    USE_MOCK ? MEMORY_SESSIONS : []
+  );
+  const [historyOpen, setHistoryOpen] = useState(
+    () => typeof window === "undefined" || !window.matchMedia("(max-width: 1100px)").matches
+  );
   const listRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
-  const sessionIdRef = useRef<string>(loadStoredSessionId());
+  const sessionIdRef = useRef<string>(requestedSession || loadStoredSessionId());
+  const runningRef = useRef(false);
+  const historySeqRef = useRef(0);
 
   useEffect(() => {
     return () => cancelRef.current?.();
   }, []);
+
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1100px)");
+    const apply = () => setHistoryOpen(!mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (USE_MOCK) return;
+    let cancelled = false;
+    getSessions()
+      .then((data) => {
+        if (!cancelled) setRecentSessions(data.sessions ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentSessions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sid = requestedSession || loadStoredSessionId();
+    sessionIdRef.current = sid;
+    if (sid) storeSessionId(sid);
+
+    if (USE_MOCK) {
+      setHistoryReady(true);
+      return;
+    }
+    if (!sid) {
+      setMessages([]);
+      setHistoryReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    const seq = ++historySeqRef.current;
+    setHistoryReady(false);
+    setRouting("idle");
+    setSteps([]);
+    setEvents([]);
+    setTimedOut(false);
+    getSessionMessages(sid)
+      .then((data) => {
+        if (cancelled || seq !== historySeqRef.current || runningRef.current) return;
+        setMessages(mapHistoryToChatMessages(data.messages ?? []));
+        setHistoryReady(true);
+      })
+      .catch(() => {
+        if (cancelled || seq !== historySeqRef.current || runningRef.current) return;
+        setMessages([]);
+        setHistoryReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedSession]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -64,6 +153,7 @@ export function Workbench() {
     const question = (text ?? input).trim();
     if (!question || running) return;
 
+    historySeqRef.current += 1;
     cancelRef.current?.();
     setTimedOut(false);
     setRunning(true);
@@ -170,6 +260,11 @@ export function Workbench() {
       onDone: () => {
         setRunning(false);
         setRouting((r) => (r === "pending" ? "idle" : r));
+        if (!USE_MOCK) {
+          getSessions()
+            .then((data) => setRecentSessions(data.sessions ?? []))
+            .catch(() => {});
+        }
       },
     };
 
@@ -179,12 +274,128 @@ export function Workbench() {
   }
 
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const activeSessionId = requestedSession || sessionIdRef.current;
+  const firstUserText = messages.find((m) => m.role === "user")?.text?.trim() || "";
+
+  const sidebarSessions = useMemo(() => {
+    const list = [...recentSessions];
+    const sid = activeSessionId;
+    if (!sid) return list;
+    const idx = list.findIndex((s) => s.id === sid);
+    if (idx < 0) {
+      list.unshift({
+        id: sid,
+        time: firstUserText ? "刚刚" : "",
+        question: firstUserText || "新对话",
+        mode: "Swarm",
+        elapsed: "",
+        summary: "",
+      });
+      return list;
+    }
+    if (firstUserText && !list[idx].question) {
+      list[idx] = { ...list[idx], question: firstUserText };
+    }
+    return list;
+  }, [recentSessions, activeSessionId, firstUserText]);
+
+  function collapseHistoryIfNarrow() {
+    if (window.matchMedia("(max-width: 1100px)").matches) {
+      setHistoryOpen(false);
+    }
+  }
+
+  function openSession(id: string) {
+    if (!id || id === activeSessionId) {
+      collapseHistoryIfNarrow();
+      return;
+    }
+    cancelRef.current?.();
+    runningRef.current = false;
+    setRunning(false);
+    setSearchParams({ session: id });
+    collapseHistoryIfNarrow();
+  }
+
+  function startNewChat() {
+    cancelRef.current?.();
+    runningRef.current = false;
+    historySeqRef.current += 1;
+    setRunning(false);
+    setMessages([]);
+    setRouting("idle");
+    setSteps([]);
+    setEvents([]);
+    setTimedOut(false);
+    setHistoryReady(true);
+    const sid = createSessionId();
+    sessionIdRef.current = sid;
+    storeSessionId(sid);
+    setSearchParams({ session: sid });
+    collapseHistoryIfNarrow();
+  }
+
+  function newChat() {
+    const isBlankDraft =
+      !!activeSessionId &&
+      messages.length === 0 &&
+      historyReady &&
+      !recentSessions.some((s) => s.id === activeSessionId);
+    if (isBlankDraft) {
+      collapseHistoryIfNarrow();
+      return;
+    }
+    startNewChat();
+  }
+
+  async function removeSession(id: string) {
+    if (!id) return;
+    if (!window.confirm("确定删除这条会话？")) return;
+    if (!USE_MOCK) {
+      try {
+        await deleteSession(id);
+      } catch (err: unknown) {
+        window.alert(err instanceof Error ? err.message : "删除失败，请稍后重试。");
+        return;
+      }
+    }
+    setRecentSessions((prev) => prev.filter((s) => s.id !== id));
+    if (id === activeSessionId) {
+      startNewChat();
+    }
+  }
 
   return (
-    <div className="page-workbench">
+    <div className={`page-workbench${historyOpen ? " history-open" : " history-collapsed"}`}>
+      {historyOpen ? (
+        <button
+          type="button"
+          className="wb-history-backdrop"
+          aria-label="关闭会话列表"
+          onClick={() => setHistoryOpen(false)}
+        />
+      ) : null}
+      <SessionSidebar
+        sessions={sidebarSessions}
+        activeId={activeSessionId}
+        open={historyOpen}
+        onNewChat={newChat}
+        onSelect={openSession}
+        onDelete={(id) => {
+          void removeSession(id);
+        }}
+        onCollapse={() => setHistoryOpen(false)}
+      />
       <section className="wb-chat">
+        {historyOpen ? null : (
+          <div className="wb-chat-tools">
+            <button type="button" className="pill ghost" onClick={() => setHistoryOpen(true)}>
+              会话
+            </button>
+          </div>
+        )}
         <div className="wb-messages" ref={listRef}>
-          {messages.length === 0 ? (
+          {messages.length === 0 && historyReady ? (
             <>
               <div className="time-center">今天</div>
               <button
@@ -259,8 +470,10 @@ export function Workbench() {
             {sideStatus.text}
           </span>
         </div>
-        <Timeline steps={steps} />
-        <EventStream events={events} />
+        <div className="wb-side-body">
+          <Timeline steps={steps} />
+          <EventStream events={events} />
+        </div>
       </aside>
     </div>
   );

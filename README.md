@@ -334,7 +334,7 @@ REDIS_CONFIG = {
 
 #### 短期记忆（ShortTermMemory）
 
-**作用**：存储当前会话的对话历史，支持多轮对话上下文理解。默认写入本机 Redis（非云端；key 为 `session:{session_id}`，不同会话分开，TTL 1 小时），重启后端后同一 `session_id` 仍能读到最近几轮。连不上 Redis 时自动降级到内存并打错误日志。
+**作用**：存储当前会话的对话历史，支持多轮对话上下文理解。默认写入本机 Redis（非云端；key 为 `session:{session_id}`，不同会话分开，TTL 7 天），重启后端后同一 `session_id` 仍能读到最近几轮。连不上 Redis 时自动降级到内存并打错误日志。
 
 **配置**：
 ```python

@@ -27,7 +27,14 @@ from .bridge import (
     map_answer_done,
     synthesize_single_agent,
 )
-from .reads import get_session_detail, list_session_rows, search_knowledge, search_mem0_similar
+from .reads import (
+    delete_session_data,
+    get_session_detail,
+    get_short_term_messages,
+    list_session_rows,
+    search_knowledge,
+    search_mem0_similar,
+)
 from .runtime import STATS
 from .sse import format_sse, with_common
 
@@ -252,6 +259,19 @@ async def sessions(limit: int = Query(default=40, ge=1, le=100)) -> Dict[str, An
     }
 
 
+@app.get("/api/sessions/{session_id}/messages")
+async def session_messages(session_id: str, request: Request) -> Dict[str, Any]:
+    runner: CoordinatorRunner = request.app.state.runner
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"session_id": "", "messages": [], "count": 0, "source": "none"}
+    if runner.coordinator is not None:
+        return await _run_worker_sync(
+            runner, get_short_term_messages, sid, runner.coordinator
+        )
+    return await asyncio.to_thread(get_short_term_messages, sid)
+
+
 @app.get("/api/sessions/{session_id}/similar")
 async def session_similar(
     session_id: str,
@@ -276,6 +296,40 @@ async def session_similar(
         "source": "mem0" if mem0_enabled else "unavailable",
         "mem0_enabled": mem0_enabled,
     }
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str, request: Request) -> Dict[str, Any]:
+    sid = (session_id or "").strip()
+    runner: CoordinatorRunner = request.app.state.runner
+    try:
+        if runner.coordinator is not None:
+            result = await _run_worker_sync(
+                runner, delete_session_data, sid, runner.coordinator
+            )
+        else:
+            result = await asyncio.to_thread(delete_session_data, sid)
+    except Exception as exc:
+        logger.exception("delete session failed")
+        result = {
+            "ok": True,
+            "session_id": sid,
+            "cleared": {"short_term": False, "session_summary": False},
+            "mem0": "not_deleted",
+            "mem0_reason": "LongTermMemory 没有按 session_id 删除的可靠 API，未改 Mem0。",
+            "warnings": [str(exc)[:180]],
+        }
+    try:
+        dropped = STATS.drop_session(sid)
+    except Exception as exc:
+        logger.error(f"Failed to drop process stats for {sid}: {exc}")
+        dropped = False
+        warnings = list(result.get("warnings") or [])
+        warnings.append(f"process_stats: {exc}")
+        result["warnings"] = warnings
+    result.setdefault("cleared", {})["process_stats"] = dropped
+    result["ok"] = True
+    return result
 
 
 @app.get("/api/sessions/{session_id}")

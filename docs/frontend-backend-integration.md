@@ -2,7 +2,7 @@
 
 > 状态：**M1 已接通**；**M1.5 LLM 真流式 + Skill 事件已实施**（`answer_delta` / `answer_done` / `skill_started` / `skill_completed`）。推荐默认：1B `/api` + 2A Vite 反代 + 5A 单 Agent 服务层合成 + 6A `webapi/` :8000。
 > 启动：项目根 `python -m uvicorn webapi.app:app --host 127.0.0.1 --port 8000`；再在 `web/` 执行 `npm run dev`。`VITE_USE_MOCK=true` 可回退 mock。
-> 短期记忆默认走本机 Redis（非云端，`127.0.0.1:6379`）。不同会话按 `session:{session_id}` 分 key，TTL 1 小时；连不上则降级内存，重启后同一 `session_id` 会丢最近几轮。
+> 短期记忆默认走本机 Redis（非云端，`127.0.0.1:6379`）。不同会话按 `session:{session_id}` 分 key，TTL 7 天；连不上则降级内存，重启后同一 `session_id` 会丢最近几轮。工作台打开会话时走 `GET /api/sessions/{id}/messages` 回填聊天框。
 > 原则：薄服务层；不改 Swarm 路由算法 / CLI；前端从 mock 切到真实 SSE。
 
 ---

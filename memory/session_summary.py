@@ -26,6 +26,19 @@ def _section(text: str, heading: str) -> str:
     return (m.group(1).strip() if m else "").strip()
 
 
+def _extract_summary_sections(text: str) -> Dict[str, str]:
+    """按 ## 标题拆出全文段落，不截断。仅用于读取，不改生成逻辑。"""
+    sections: Dict[str, str] = {}
+    parts = re.split(r"^## ", text, flags=re.M)
+    for part in parts[1:]:
+        heading, _, body = part.partition("\n")
+        heading = heading.strip()
+        body = body.strip()
+        if heading:
+            sections[heading] = body
+    return sections
+
+
 def _parse_summary_markdown(session_id: str, text: str, mtime: float) -> Dict[str, Any]:
     time_m = re.search(r"\*\*时间\*\*:\s*(.+)", text)
     time_raw = (time_m.group(1).strip() if time_m else "")
@@ -43,7 +56,8 @@ def _parse_summary_markdown(session_id: str, text: str, mtime: float) -> Dict[st
     agents_m = re.search(r"参与 Agent：(\d+)", text)
     subtasks_m = re.search(r"创建子任务：(\d+)", text)
     elapsed_s = float(elapsed_m.group(1)) if elapsed_m else None
-    agent_count = int(agents_m.group(1)) if agents_m else 0
+    agent_names = re.findall(r"^###\s+([^\s(]+)", _section(text, "参与 Agent"), flags=re.M)
+    agent_count = int(agents_m.group(1)) if agents_m else len(agent_names)
     subtasks = int(subtasks_m.group(1)) if subtasks_m else 0
     mode = "Swarm" if subtasks >= 2 or agent_count >= 2 else "单 Agent"
     summary = re.sub(r"\s+", " ", answer)[:120].strip()
@@ -61,6 +75,7 @@ def _parse_summary_markdown(session_id: str, text: str, mtime: float) -> Dict[st
         "elapsed_s": elapsed_s,
         "summary": summary,
         "agent_count": agent_count,
+        "agents": agent_names,
         "subtasks_created": subtasks,
     }
 
@@ -199,7 +214,7 @@ class SessionSummary:
         lines.extend([
             "## 最终答案",
             "",
-            self.final_answer[:500] + ("..." if len(self.final_answer) > 500 else ""),
+            self.final_answer or "",
             ""
         ])
 
@@ -349,6 +364,30 @@ class SessionSummaryManager:
             return expected
         matches = list(self.base_dir.rglob(f"{session_id}.md"))
         return matches[0] if matches else None
+
+    def delete_summary(self, session_id: str) -> bool:
+        """按 session_id 删除 markdown。不存在返回 False，不抛 FileNotFoundError。"""
+        sid = (session_id or "").strip()
+        if not sid or "/" in sid or "\\" in sid or ".." in sid:
+            return False
+        path = self._resolve_path(sid)
+        if path is None:
+            return False
+        try:
+            path.unlink()
+            parent = path.parent
+            if parent != self.base_dir and parent.is_dir() and not any(parent.iterdir()):
+                try:
+                    parent.rmdir()
+                except OSError:
+                    pass
+            logger.info(f"Deleted session summary: {sid}")
+            return True
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting session summary: {e}")
+            raise
 
     def read_markdown(self, session_id: str) -> Optional[str]:
         path = self._resolve_path(session_id)

@@ -92,5 +92,16 @@ class RuntimeStats:
     def recent_sessions(self) -> List[Dict[str, Any]]:
         return list(self.recent)
 
+    def drop_session(self, session_id: str) -> bool:
+        """从进程内最近会话里去掉该 id（可有多条）。不存在则 False。"""
+        sid = (session_id or "").strip()
+        if not sid:
+            return False
+        kept = [item for item in self.recent if item.get("id") != sid]
+        dropped = len(kept) < len(self.recent)
+        if dropped:
+            self.recent = deque(kept, maxlen=40)
+        return dropped
+
 
 STATS = RuntimeStats()

@@ -6,11 +6,15 @@
 
 import type {
   AnswerPayload,
+  ChatMessage,
   FixRecord,
   KnowledgeDoc,
+  DeleteSessionResult,
   MemorySession,
+  MemorySessionDetail,
   RoutingMode,
   RuntimeStatsPayload,
+  ShortTermChatMessage,
   SimilarCase,
   StreamEvent,
   TimelineStep,
@@ -72,8 +76,17 @@ export function loadStoredSessionId(): string {
 export function storeSessionId(id: string): void {
   try {
     if (id) sessionStorage.setItem(SESSION_STORAGE_KEY, id);
+    else sessionStorage.removeItem(SESSION_STORAGE_KEY);
   } catch {
     /* ignore quota / private mode */
+  }
+}
+
+export function clearStoredSessionId(): void {
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -400,9 +413,81 @@ export function getSessions() {
 }
 
 export function getSessionDetail(id: string) {
-  return fetchJson<MemorySession & { markdown?: string | null; error?: string }>(
-    `/api/sessions/${encodeURIComponent(id)}`
-  );
+  return fetchJson<MemorySessionDetail>(`/api/sessions/${encodeURIComponent(id)}`);
+}
+
+export async function deleteSession(id: string): Promise<DeleteSessionResult> {
+  const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(id)}`), {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    throw new Error(`服务器返回 HTTP ${res.status}`);
+  }
+  if (res.status === 204) {
+    return { ok: true, session_id: id };
+  }
+  try {
+    const data = (await res.json()) as DeleteSessionResult;
+    return { ...data, ok: true, session_id: data.session_id ?? id };
+  } catch {
+    return { ok: true, session_id: id };
+  }
+}
+
+export function getSessionMessages(sessionId: string) {
+  return fetchJson<{
+    session_id: string;
+    messages: ShortTermChatMessage[];
+    count?: number;
+    source?: string;
+  }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages`);
+}
+
+export function formatHistoryTimeLabel(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (sameDay) return `今天 ${hm}`;
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`;
+}
+
+export function mapHistoryToChatMessages(items: ShortTermChatMessage[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  items.forEach((item, idx) => {
+    const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : null;
+    if (!role) return;
+    const text = String(item.content ?? "");
+    const timeLabel = formatHistoryTimeLabel(item.timestamp) || undefined;
+    const id = `hist-${idx}-${role}`;
+    if (role === "user") {
+      out.push({ id, role, text, timeLabel });
+      return;
+    }
+    out.push({
+      id,
+      role,
+      text,
+      timeLabel,
+      answer: {
+        body: text,
+        suggestions: [],
+        sources: [],
+        disclaimer: "",
+        elapsed: "—",
+        agentCount: 1,
+      },
+      reveal: { alert: false, suggestions: false, sources: false, disclaimer: false },
+    });
+  });
+  return out;
 }
 
 export function getSimilarCases(sessionId: string) {

@@ -168,6 +168,8 @@ export const MEMORY_SESSIONS: MemorySession[] = [
     mode: "Swarm",
     elapsed: "24.8s",
     summary: "复杂咨询，分解为健康咨询 / 症状诊断 / 医学研究三个子任务。中危，建议一周内就诊并规律测压。",
+    agent_count: 3,
+    agents: ["consultation_agent", "diagnostic_agent", "research_agent"],
   },
   {
     id: "s2",
@@ -176,6 +178,8 @@ export const MEMORY_SESSIONS: MemorySession[] = [
     mode: "单 Agent",
     elapsed: "9.7s",
     summary: "单 Agent 快速应答：适量饮水原则，心肾功能不全需遵医嘱。",
+    agent_count: 1,
+    agents: ["consultation_agent"],
   },
   {
     id: "s3",
@@ -184,6 +188,8 @@ export const MEMORY_SESSIONS: MemorySession[] = [
     mode: "单 Agent",
     elapsed: "11.2s",
     summary: "低盐、补钾、控制饱和脂肪；引用生活方式知识库条目。",
+    agent_count: 1,
+    agents: ["consultation_agent"],
   },
 ];
 

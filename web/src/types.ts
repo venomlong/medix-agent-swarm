@@ -46,6 +46,12 @@ export interface ChatMessage {
   reveal?: AnswerReveal;
 }
 
+export interface ShortTermChatMessage {
+  role: string;
+  content: string;
+  timestamp?: string;
+}
+
 export interface AnswerReveal {
   alert: boolean;
   suggestions: boolean;
@@ -71,6 +77,30 @@ export interface MemorySession {
   mode: "Swarm" | "单 Agent";
   elapsed: string;
   summary: string;
+  agent_count?: number;
+  agents?: string[];
+}
+
+export interface MemorySessionDetail extends MemorySession {
+  markdown?: string | null;
+  error?: string;
+  source?: string;
+  sections?: Record<string, string>;
+  question_full?: string;
+  final_answer?: string;
+}
+
+export interface DeleteSessionResult {
+  ok: boolean;
+  session_id?: string;
+  cleared?: {
+    short_term?: boolean;
+    session_summary?: boolean;
+    process_stats?: boolean;
+  };
+  mem0?: string;
+  mem0_reason?: string;
+  warnings?: string[];
 }
 
 export interface SimilarCase {

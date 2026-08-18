@@ -28,6 +28,86 @@ def list_session_rows(limit: int = 40) -> List[Dict[str, Any]]:
     return rows
 
 
+def get_short_term_messages(
+    session_id: str,
+    coordinator: Any = None,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """按 session_id 读取短期记忆（Redis/内存），供工作台回填聊天框。"""
+    stm = getattr(coordinator, "short_term_memory", None) if coordinator is not None else None
+    if stm is None:
+        from memory.short_term import ShortTermMemory
+
+        stm = ShortTermMemory()
+
+    history = stm.get_session(session_id) if session_id else None
+    messages: List[Dict[str, Any]] = []
+    if history:
+        for msg in history.messages:
+            role = str(msg.get("role") or "")
+            if role not in ("user", "assistant"):
+                continue
+            messages.append(
+                {
+                    "role": role,
+                    "content": str(msg.get("content") or ""),
+                    "timestamp": msg.get("timestamp"),
+                }
+            )
+        if limit > 0:
+            messages = messages[-limit:]
+
+    return {
+        "session_id": session_id,
+        "messages": messages,
+        "count": len(messages),
+        "source": getattr(stm, "storage_type", "unknown"),
+    }
+
+
+def delete_session_data(session_id: str, coordinator: Any = None) -> Dict[str, Any]:
+    """删除会话级数据：短期记忆 + SessionSummary 文件。不碰 Mem0。"""
+    sid = (session_id or "").strip()
+    cleared = {
+        "short_term": False,
+        "session_summary": False,
+    }
+    warnings: List[str] = []
+
+    if sid:
+        stm = getattr(coordinator, "short_term_memory", None) if coordinator is not None else None
+        if stm is None:
+            from memory.short_term import ShortTermMemory
+
+            stm = ShortTermMemory()
+        try:
+            stm.clear_session(sid)
+            cleared["short_term"] = True
+        except Exception as exc:
+            logger.error(f"Failed to clear short-term session {sid}: {exc}")
+            warnings.append(f"short_term: {exc}")
+
+        try:
+            from memory.session_summary import SessionSummaryManager
+
+            mgr = SessionSummaryManager()
+            cleared["session_summary"] = bool(mgr.delete_summary(sid))
+        except Exception as exc:
+            logger.error(f"Failed to delete session summary {sid}: {exc}")
+            warnings.append(f"session_summary: {exc}")
+
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "session_id": sid,
+        "cleared": cleared,
+        "mem0": "not_deleted",
+        "mem0_reason": "LongTermMemory 没有按 session_id 删除的可靠 API，未改 Mem0。",
+    }
+    if warnings:
+        payload["warnings"] = warnings
+    return payload
+
+
 def get_session_detail(session_id: str) -> Optional[Dict[str, Any]]:
     from memory.session_summary import SessionSummaryManager
 
@@ -37,10 +117,14 @@ def get_session_detail(session_id: str) -> Optional[Dict[str, Any]]:
         return None
     path = mgr._resolve_path(session_id)
     mtime = path.stat().st_mtime if path else 0.0
-    from memory.session_summary import _parse_summary_markdown
+    from memory.session_summary import _extract_summary_sections, _parse_summary_markdown
 
     parsed = _parse_summary_markdown(session_id, text, mtime)
+    sections = _extract_summary_sections(text)
     parsed["markdown"] = text
+    parsed["sections"] = sections
+    parsed["question_full"] = sections.get("问题") or parsed.get("question")
+    parsed["final_answer"] = sections.get("最终答案") or ""
     parsed["source"] = "session_summary"
     return parsed
 

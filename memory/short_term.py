@@ -4,7 +4,7 @@
 功能：
 - 管理会话级的对话历史（messages）
 - 默认 Redis 存储；连不上时降级到内存
-- 自动过期机制（Redis 1小时）
+- 自动过期机制（Redis 7 天）
 - 熵管理：自动去重和压缩（Harness Engineering）
 """
 import os
@@ -108,7 +108,7 @@ class ShortTermMemory:
     短期记忆管理器（单例模式）
 
     支持两种存储后端：
-    1. redis：Redis 存储（默认；TTL 1 小时，key 为 session:{session_id}）
+    1. redis：Redis 存储（默认；TTL 7 天，key 为 session:{session_id}）
     2. memory：纯内存存储（Redis 连不上时自动降级）
 
     使用场景：
@@ -119,6 +119,7 @@ class ShortTermMemory:
 
     _instance = None  # 单例实例
     _lock = None  # 用于线程安全（如果需要）
+    REDIS_TTL_SECONDS = 7 * 24 * 3600  # 604800，7 天
 
     def __new__(cls, *args, **kwargs):
         """单例模式：确保只有一个 ShortTermMemory 实例"""
@@ -190,7 +191,7 @@ class ShortTermMemory:
                 self.redis_client.ping()
                 logger.info(
                     f"ShortTermMemory initialized with Redis at {host}:{port} db={db} "
-                    f"(key=session:{{id}}, TTL=3600s)"
+                    f"(key=session:{{id}}, TTL={self.REDIS_TTL_SECONDS}s)"
                 )
             except Exception as e:
                 logger.error(
@@ -202,6 +203,29 @@ class ShortTermMemory:
                 self.redis_client = None
         else:
             logger.info("ShortTermMemory initialized with in-memory storage")
+
+    def _fallback_to_memory(
+        self,
+        reason: str,
+        history: Optional[ConversationHistory] = None,
+    ) -> None:
+        """
+        Redis 运行时失败时切到内存模式。
+
+        如果当前操作已经拿到会话历史，则一并放入进程内缓存，避免本轮上下文丢失。
+        """
+        if history is not None:
+            self.sessions[history.session_id] = history
+
+        if self.storage_type != "memory":
+            logger.warning(
+                f"ShortTermMemory falling back to in-memory storage: {reason}"
+            )
+        else:
+            logger.warning(f"ShortTermMemory memory fallback in use: {reason}")
+
+        self.storage_type = "memory"
+        self.redis_client = None
 
     def create_session(
         self,
@@ -227,6 +251,7 @@ class ShortTermMemory:
             self.sessions[session_id] = history
         elif self.storage_type == "redis" and self.redis_client:
             self._save_to_redis(history)
+            self.sessions[session_id] = history
 
         logger.debug(f"Created session: {session_id}")
         return history
@@ -271,7 +296,11 @@ class ShortTermMemory:
         if self.storage_type == "memory":
             return self.sessions.get(session_id)
         elif self.storage_type == "redis" and self.redis_client:
-            return self._load_from_redis(session_id)
+            history = self._load_from_redis(session_id)
+            if history is not None:
+                self.sessions[session_id] = history
+                return history
+            return self.sessions.get(session_id)
         return None
 
     def get_recent_messages(
@@ -354,7 +383,11 @@ class ShortTermMemory:
             self.sessions.pop(session_id, None)
         elif self.storage_type == "redis" and self.redis_client:
             key = f"session:{session_id}"
-            self.redis_client.delete(key)
+            try:
+                self.redis_client.delete(key)
+            except Exception as e:
+                self._fallback_to_memory(f"failed to clear Redis session {session_id}: {e}")
+            self.sessions.pop(session_id, None)
 
         logger.debug(f"Cleared session: {session_id}")
 
@@ -366,10 +399,12 @@ class ShortTermMemory:
         try:
             key = f"session:{history.session_id}"
             value = json.dumps(history.to_dict())
-            # 设置过期时间：1小时（3600秒）
-            self.redis_client.setex(key, 3600, value)
+            self.redis_client.setex(key, self.REDIS_TTL_SECONDS, value)
         except Exception as e:
-            logger.error(f"Failed to save to Redis: {e}")
+            self._fallback_to_memory(
+                f"failed to save session {history.session_id} to Redis: {e}",
+                history=history,
+            )
 
     def _load_from_redis(self, session_id: str) -> Optional[ConversationHistory]:
         """从 Redis 加载（内部方法）"""
@@ -384,6 +419,10 @@ class ShortTermMemory:
                 data = json.loads(value)
                 return ConversationHistory.from_dict(data)
         except Exception as e:
-            logger.error(f"Failed to load from Redis: {e}")
+            cached_history = self.sessions.get(session_id)
+            self._fallback_to_memory(
+                f"failed to load session {session_id} from Redis: {e}",
+                history=cached_history,
+            )
 
         return None

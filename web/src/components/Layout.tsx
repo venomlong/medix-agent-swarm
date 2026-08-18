@@ -37,7 +37,9 @@ export function Layout() {
           </span>
         </div>
       </nav>
-      <Outlet />
+      <div className="app-main">
+        <Outlet />
+      </div>
     </div>
   );
 }
