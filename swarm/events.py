@@ -21,6 +21,7 @@ class EventType(Enum):
     SKILL_STARTED = "skill_started"              # Agent 开始调用 Skill
     SKILL_COMPLETED = "skill_completed"          # Agent 完成一次 Skill 调用
     EMERGENCY_TRIGGERED = "emergency_triggered"  # 急症分诊命中，短路常规流程
+    HARMFUL_BLOCKED = "harmful_blocked"          # 敏感/有害输入拦截，短路常规流程
     GUARDRAIL_TRIGGERED = "guardrail_triggered"  # 输出护栏发现违规并处置
 
 

@@ -95,6 +95,19 @@ export function initialSteps(
     ];
   }
 
+  if (mode === "blocked") {
+    return [
+      {
+        id: "harm-filter",
+        title: "内容拦截",
+        agentLabel: "HarmFilter",
+        status: "done",
+        desc: "命中敏感/有害内容规则，已短路常规 Swarm 流程",
+        skills: [],
+      },
+    ];
+  }
+
   if (mode === "single") {
     return [
       {
@@ -190,6 +203,16 @@ export function applyTimelineEvent(
     });
   }
 
+  if (eventName === "harmful_blocked") {
+    if (steps.length === 0 || steps.every((s) => s.id !== "harm-filter")) {
+      return initialSteps("blocked");
+    }
+    return patchById(steps, "harm-filter", {
+      status: "done",
+      desc: String(data.reason || "命中敏感/有害内容规则，已短路常规 Swarm 流程"),
+    });
+  }
+
   if (eventName === "swarm_started") {
     const count = Number(data.num_subtasks ?? 0);
     if (steps.length === 0) {
@@ -276,6 +299,14 @@ export function applyTimelineEvent(
         status: "done",
         duration,
         desc: "命中急症规则，已返回急救指引",
+      });
+    }
+    if (next.some((s) => s.id === "harm-filter") || Boolean(data.blocked)) {
+      if (next.length === 0) next = initialSteps("blocked");
+      return patchById(next, "harm-filter", {
+        status: "done",
+        duration,
+        desc: "命中敏感/有害内容规则，已拒绝回答",
       });
     }
     if (next.length === 0) {

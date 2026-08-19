@@ -97,6 +97,23 @@ export const SIMPLE_ANSWER: Omit<AnswerPayload, "elapsed"> = {
   traceId: "demo-simple01",
 };
 
+export const BLOCKED_ANSWER: Omit<AnswerPayload, "elapsed"> = {
+  body:
+    "本系统无法回答该请求。\n\n本系统只提供健康咨询，不能按「忽略规则 / 越狱」的方式作答。\n\n请直接描述您的健康问题，例如症状、用药或生活方式咨询。",
+  alert: "检测到与健康咨询无关的敏感或有害内容，已跳过常规分析流程。",
+  alertNote: "内容拦截（jailbreak）已短路常规 Swarm",
+  suggestions: [
+    "用症状、检查或用药等健康问题重新提问",
+    "急症请拨打 120，不要依赖在线咨询",
+  ],
+  sources: [],
+  disclaimer: "本提示由输入安全规则自动生成，不构成医疗建议。",
+  agentCount: 1,
+  blocked: true,
+  usage: { totalTokens: 0, cost: 0, llmCalls: 0 },
+  traceId: "demo-block01",
+};
+
 export const EMERGENCY_ANSWER: Omit<AnswerPayload, "elapsed"> = {
   body:
     "🚨 **急症提醒**\n\n您描述的症状提示可能存在心脏急症（如心肌梗死）。\n\n请立即采取以下措施：\n1. **立即拨打 120 急救电话**，说明症状和所在位置\n2. 立即停止一切活动，原地坐下或半卧位休息，保持镇静\n3. **不要自行驾车或步行去医院**，等待救护车",

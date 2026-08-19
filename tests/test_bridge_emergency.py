@@ -72,5 +72,54 @@ class EmergencyLiveListenerTests(unittest.TestCase):
         self.assertEqual(payload["alert_note"], "急症分诊已短路常规 Swarm")
 
 
+class HarmfulLiveListenerTests(unittest.TestCase):
+    def test_harmful_blocked_sets_live_and_emits_routing(self):
+        emitted = []
+        flags = {"live": False}
+
+        def emit(name, data):
+            emitted.append((name, data))
+
+        listener = attach_live_listener(emit, "sess-h", flags)
+        listener(
+            Event(
+                type=EventType.HARMFUL_BLOCKED,
+                source_agent="harm_filter",
+                data={
+                    "is_harmful": True,
+                    "category": "jailbreak",
+                    "matched": ["忽略以上指令"],
+                    "reason": "命中jailbreak短语",
+                    "method": "rule",
+                },
+            )
+        )
+
+        self.assertTrue(flags["live"])
+        self.assertEqual([name for name, _ in emitted], ["routing", "harmful_blocked"])
+        routing = emitted[0][1]
+        self.assertEqual(routing["mode"], "blocked")
+        self.assertEqual(routing["subtask_count"], 0)
+        self.assertEqual(emitted[1][1]["category"], "jailbreak")
+
+    def test_map_answer_done_passthrough_blocked(self):
+        payload = map_answer_done(
+            {
+                "answer": "本系统无法回答该请求。",
+                "blocked": True,
+                "alert": "检测到敏感内容",
+                "suggestions": ["用健康问题重新提问"],
+                "disclaimer": "不构成医疗建议",
+                "swarm_enabled": False,
+            },
+            "sess-h",
+            0.2,
+        )
+        self.assertTrue(payload["blocked"])
+        self.assertFalse(payload["emergency"])
+        self.assertEqual(payload["alert"], "检测到敏感内容")
+        self.assertFalse(payload["swarm_enabled"])
+
+
 if __name__ == "__main__":
     unittest.main()

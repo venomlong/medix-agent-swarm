@@ -1,6 +1,6 @@
 export type StepStatus = "pending" | "running" | "done" | "failed" | "timeout";
 
-export type RoutingMode = "idle" | "pending" | "swarm" | "single" | "emergency";
+export type RoutingMode = "idle" | "pending" | "swarm" | "single" | "emergency" | "blocked";
 
 export interface SkillTag {
   name: string;
@@ -55,6 +55,7 @@ export interface AnswerPayload {
   agentCount: number;
   timedOut?: boolean;
   emergency?: boolean;
+  blocked?: boolean;
   usage?: AnswerUsage;
   traceId?: string;
   guardrail?: GuardrailInfo;

@@ -112,6 +112,8 @@ class CoordinatorRunner:
                 rule_hit = bool(
                     self.coordinator.triage.check_rules(question).is_emergency
                 )
+                if not rule_hit and getattr(self.coordinator, "harm_filter", None):
+                    rule_hit = bool(self.coordinator.harm_filter.check_rules(question).is_harmful)
             except Exception:
                 rule_hit = False
 
@@ -196,13 +198,18 @@ def map_answer_done(
 
     trace = result.get("trace") or {}
     emergency = bool(result.get("emergency"))
+    blocked = bool(result.get("blocked"))
     alert = result.get("alert")
     if not alert and emergency:
         # 急症路径必须有可渲染警示；缺字段时补默认文案，避免前端只靠启发式
         alert = "检测到疑似急症，系统已跳过常规分析流程，请优先执行急救指引。"
+    if not alert and blocked:
+        alert = "检测到与健康咨询无关的敏感或有害内容，已跳过常规分析流程。"
     alert_note = result.get("alert_note")
     if not alert_note and emergency:
         alert_note = "急症分诊已短路常规 Swarm"
+    if not alert_note and blocked:
+        alert_note = "内容拦截已短路常规 Swarm"
     return with_common(
         {
             "body": result.get("answer") or "",
@@ -215,6 +222,7 @@ def map_answer_done(
             "alert_note": alert_note,
             "sources": result.get("sources") or [],
             "emergency": emergency,
+            "blocked": blocked,
             "guardrail": result.get("guardrail"),
             "usage": {
                 "total_tokens": trace.get("total_tokens", 0),
@@ -371,6 +379,20 @@ def attach_live_listener(
                 "routing",
                 with_common(
                     {"mode": "emergency", "subtask_count": 0},
+                    session_id,
+                    event.timestamp.isoformat(),
+                ),
+            )
+        if event.type == EventType.HARMFUL_BLOCKED:
+            flags["live"] = True
+            emit(
+                "routing",
+                with_common(
+                    {
+                        "mode": "blocked",
+                        "subtask_count": 0,
+                        "reason": event.data.get("reason") or "内容拦截",
+                    },
                     session_id,
                     event.timestamp.isoformat(),
                 ),

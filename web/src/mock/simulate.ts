@@ -1,4 +1,5 @@
 import {
+  BLOCKED_ANSWER,
   EMERGENCY_ANSWER,
   FOLLOWUP_ANSWER,
   SIMPLE_ANSWER,
@@ -43,6 +44,18 @@ function isEmergency(question: string): boolean {
 function isComplex(question: string): boolean {
   const keys = ["头晕", "乏力", "高血压", "糖尿病", "父亲", "母亲", "胸痛", "睡不好"];
   return keys.some((k) => question.includes(k));
+}
+
+function isHarmful(question: string): boolean {
+  const text = (question || "").replace(/\s+/g, "").toLowerCase();
+  return [
+    "忽略以上指令",
+    "jailbreak",
+    "怎么做炸弹",
+    "合成冰毒",
+    "怎么诈骗",
+    "操你妈",
+  ].some((k) => text.includes(k));
 }
 
 function isFollowup(question: string): boolean {
@@ -104,7 +117,8 @@ export function simulateConsultation(question: string, h: SimulateHandlers): () 
   };
 
   const emergency = isEmergency(question);
-  const complex = !emergency && isComplex(question) && !isFollowup(question);
+  const harmful = !emergency && isHarmful(question);
+  const complex = !emergency && !harmful && isComplex(question) && !isFollowup(question);
   let steps = emergency
     ? [
         {
@@ -116,13 +130,24 @@ export function simulateConsultation(question: string, h: SimulateHandlers): () 
           skills: [],
         },
       ]
+    : harmful
+      ? [
+          {
+            id: "harm-filter",
+            title: "内容拦截",
+            agentLabel: "HarmFilter",
+            status: "running" as const,
+            desc: "正在检查输入安全……",
+            skills: [],
+          },
+        ]
     : complex
       ? swarmSteps()
       : singleSteps();
 
   h.onRouting("pending");
   h.onSteps(steps);
-  if (!emergency) {
+  if (!emergency && !harmful) {
     h.onEvent({ ts: nowTs(), name: "swarm_started" });
   }
 
@@ -131,6 +156,10 @@ export function simulateConsultation(question: string, h: SimulateHandlers): () 
       h.onRouting("emergency", 0);
       h.onEvent({ ts: nowTs(), name: "emergency_triggered · cardiac" });
       runEmergency();
+    } else if (isHarmful(question)) {
+      h.onRouting("blocked", 0);
+      h.onEvent({ ts: nowTs(), name: "harmful_blocked · jailbreak" });
+      runBlocked();
     } else if (complex) {
       h.onRouting("swarm", 3);
       h.onEvent({ ts: nowTs(), name: "task_decomposed ×3" });
@@ -157,6 +186,24 @@ export function simulateConsultation(question: string, h: SimulateHandlers): () 
     });
     later(240, () => {
       startAnswer(EMERGENCY_ANSWER, 1);
+    });
+  }
+
+  function runBlocked() {
+    later(0, () => {
+      h.onSteps([
+        {
+          id: "harm-filter",
+          title: "内容拦截",
+          agentLabel: "HarmFilter",
+          status: "done",
+          desc: "命中敏感/有害内容规则，已短路常规 Swarm 流程",
+          skills: [],
+        },
+      ]);
+    });
+    later(240, () => {
+      startAnswer(BLOCKED_ANSWER, 1);
     });
   }
 

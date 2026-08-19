@@ -24,7 +24,7 @@ from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongT
 from memory.short_term import get_redis_config
 from core.source_collector import get_sources, start_collect, stop_collect
 from core.tracing import add_span, end_trace, get_trace, save_trace, start_trace
-from safety import EmergencyTriage, build_emergency_result
+from safety import EmergencyTriage, HarmfulContentFilter, build_blocked_result, build_emergency_result
 from validation.guardrail import OutputGuardrail, apply_guardrail_to_result
 
 
@@ -67,7 +67,9 @@ class SwarmCoordinator:
 
         # 急症分诊器（输入侧 fail-fast）
         self.triage = EmergencyTriage(llm_client=self.llm_client)
-        # 输出侧护栏（规则常开；LLM 只在违规时重写）。急症短路路径不调用。
+        # 敏感/有害输入拦截（急症之后、分解之前）
+        self.harm_filter = HarmfulContentFilter(llm_client=self.llm_client)
+        # 输出侧护栏（规则常开；LLM 只在违规时重写）。急症/拦截短路路径不调用。
         self.guardrail = OutputGuardrail(llm_client=self.llm_client)
 
         # 记忆管理器
@@ -222,6 +224,30 @@ class SwarmCoordinator:
             result = await self._handle_emergency(
                 question=question,
                 triage_result=triage_result,
+                session_id=session_id,
+                start_time=start_time,
+            )
+            self._attach_sources(result)
+            return result
+
+        # ===== Step 0b: 敏感/有害内容拦截 =====
+        harm_t0 = time.monotonic()
+        harm_verdict = await self.harm_filter.screen(question)
+        add_span(
+            "harm_filter",
+            "phase",
+            harm_t0,
+            time.monotonic(),
+            {
+                "blocked": bool(harm_verdict.is_harmful),
+                "category": getattr(harm_verdict, "category", "") or "",
+                "method": getattr(harm_verdict, "method", "") or "",
+            },
+        )
+        if harm_verdict.is_harmful:
+            result = await self._handle_harmful(
+                question=question,
+                verdict=harm_verdict,
                 session_id=session_id,
                 start_time=start_time,
             )
@@ -495,6 +521,96 @@ class SwarmCoordinator:
             self.session_manager.save_summary(summary)
         except Exception as e:
             logger.error(f"Failed to generate emergency session summary: {e}")
+
+    async def _handle_harmful(
+        self,
+        question: str,
+        verdict,
+        session_id: str,
+        start_time: datetime,
+    ) -> Dict[str, Any]:
+        """
+        有害内容短路：发布事件 → 拒绝模板 → 写短期记忆和会话总结。
+        不写 Mem0（拦截回复没有「相似案例」价值）。
+        """
+        emit_live_event(Event(
+            type=EventType.HARMFUL_BLOCKED,
+            source_agent="harm_filter",
+            data=verdict.to_dict(),
+        ))
+
+        result = build_blocked_result(question, verdict, session_id)
+        end_time = datetime.now()
+        result["total_time"] = (end_time - start_time).total_seconds()
+
+        on_delta = get_answer_delta_listener()
+        if on_delta and result.get("answer"):
+            try:
+                on_delta(result["answer"])
+            except Exception as e:
+                logger.debug(f"Harm-filter answer_delta emit failed: {e}")
+
+        try:
+            from safety.harm_filter import log_blocked
+
+            log_blocked(verdict, session_id)
+        except Exception:
+            pass
+
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._persist_blocked_memory,
+                    question,
+                    result.get("answer") or "",
+                    session_id,
+                    start_time,
+                    end_time,
+                ),
+                timeout=0.4,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Blocked-content memory persist exceeded 0.4s, returning anyway")
+        except Exception as e:
+            logger.error(f"Failed to persist blocked conversation: {e}")
+
+        logger.warning(
+            f"Harmful content blocked in {result['total_time']:.2f}s "
+            f"(category={verdict.category}, session={session_id})"
+        )
+        return result
+
+    def _persist_blocked_memory(
+        self,
+        question: str,
+        answer: str,
+        session_id: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
+        try:
+            self.short_term_memory.add_message(
+                session_id=session_id, role="user", content=question
+            )
+            self.short_term_memory.add_message(
+                session_id=session_id, role="assistant", content=answer
+            )
+        except Exception as e:
+            logger.error(f"Failed to save blocked conversation to short-term memory: {e}")
+
+        try:
+            summary = SessionSummary.from_single_agent(
+                session_id=session_id,
+                question=question,
+                final_answer=answer,
+                agent_id="harm_filter",
+                start_time=start_time,
+                end_time=end_time,
+                mode="blocked",
+            )
+            self.session_manager.save_summary(summary)
+        except Exception as e:
+            logger.error(f"Failed to generate blocked session summary: {e}")
 
     async def _process_with_swarm(
         self,

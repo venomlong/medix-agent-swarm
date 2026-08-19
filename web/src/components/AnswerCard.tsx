@@ -16,6 +16,7 @@ const DEFAULT_REVEAL: AnswerReveal = {
 };
 
 const EMERGENCY_ALERT = "检测到疑似急症，系统已跳过常规分析流程，请优先执行急救指引。";
+const BLOCKED_ALERT = "检测到与健康咨询无关的敏感或有害内容，已跳过常规分析流程。";
 
 function scoreLabel(score: number): string {
   const pct = score <= 1 ? Math.round(score * 100) : Math.round(score);
@@ -82,15 +83,23 @@ function SourcePills({ sources }: { sources: SourceRef[] }) {
 export function AnswerCard({ answer, streaming, reveal }: Props) {
   const r = reveal ?? DEFAULT_REVEAL;
   const emergency = Boolean(answer.emergency);
-  const alertText = (answer.alert || "").trim() || (emergency ? EMERGENCY_ALERT : "");
+  const blocked = Boolean(answer.blocked);
+  const alertText =
+    (answer.alert || "").trim() ||
+    (emergency ? EMERGENCY_ALERT : blocked ? BLOCKED_ALERT : "");
   const usageText = usageChipLabel(answer.usage);
   const guardrail = answer.guardrail;
+  const headLabel = emergency
+    ? "急症分诊 · 已短路常规协作流程"
+    : blocked
+      ? "内容拦截 · 已短路常规协作流程"
+      : `${answer.agentCount} 个专业 Agent 协作回答`;
   return (
-    <article className={`answer${emergency ? " emergency" : ""}`}>
+    <article className={`answer${emergency ? " emergency" : ""}${blocked ? " blocked" : ""}`}>
       <div className="answer-head">
-        <AgentAvatarGroup count={emergency ? 1 : answer.agentCount} />
+        <AgentAvatarGroup count={emergency || blocked ? 1 : answer.agentCount} />
         <span className="muted" style={{ fontSize: 12 }}>
-          {emergency ? "急症分诊 · 已短路常规协作流程" : `${answer.agentCount} 个专业 Agent 协作回答`}
+          {headLabel}
         </span>
         <span style={{ flex: 1 }} />
         <div className="answer-meta">
@@ -107,7 +116,7 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
       </div>
 
       {r.alert && alertText ? (
-        <div className={`alert-bar${emergency ? " critical" : ""}`}>
+        <div className={`alert-bar${emergency ? " critical" : ""}${blocked ? " blocked" : ""}`}>
           {alertText}
           {answer.alertNote ? (
             <div style={{ fontWeight: 400, fontSize: 11, marginTop: 2 }}>{answer.alertNote}</div>
@@ -122,7 +131,9 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
 
       {r.suggestions && answer.suggestions.length > 0 ? (
         <div>
-          <strong style={{ fontSize: 13.5 }}>{emergency ? "【急救建议】" : "【核心建议】"}</strong>
+          <strong style={{ fontSize: 13.5 }}>
+            {emergency ? "【急救建议】" : blocked ? "【安全提示】" : "【核心建议】"}
+          </strong>
           {answer.suggestions.map((s, i) => (
             <p key={s} style={{ fontSize: 13, marginTop: i === 0 ? 4 : 0 }}>
               {i + 1}. {s}

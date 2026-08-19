@@ -114,6 +114,10 @@ function eventLabel(name: string, data: Record<string, unknown>): string {
     const cat = String(data.category ?? "");
     return cat ? `emergency_triggered · ${cat}` : "emergency_triggered";
   }
+  if (name === "harmful_blocked") {
+    const cat = String(data.category ?? "");
+    return cat ? `harmful_blocked · ${cat}` : "harmful_blocked";
+  }
   if (name === "guardrail_triggered") {
     const action = String(data.action ?? "");
     return action ? `guardrail_triggered · ${action}` : "guardrail_triggered";
@@ -122,7 +126,7 @@ function eventLabel(name: string, data: Record<string, unknown>): string {
 }
 
 function parseRoutingMode(mode: unknown): Exclude<RoutingMode, "idle" | "pending"> {
-  if (mode === "single" || mode === "emergency") return mode;
+  if (mode === "single" || mode === "emergency" || mode === "blocked") return mode;
   return "swarm";
 }
 
@@ -134,12 +138,19 @@ function asNonEmptyString(value: unknown): string | undefined {
 
 function extractAlert(
   body: string,
-  emergency: boolean
+  emergency: boolean,
+  blocked = false
 ): Pick<AnswerPayload, "alert" | "alertNote"> {
   if (emergency) {
     return {
       alert: "检测到疑似急症，系统已跳过常规分析流程，请优先执行急救指引。",
       alertNote: "急症分诊已短路常规 Swarm",
+    };
+  }
+  if (blocked) {
+    return {
+      alert: "检测到与健康咨询无关的敏感或有害内容，已跳过常规分析流程。",
+      alertNote: "内容拦截已短路常规 Swarm",
     };
   }
   if (/重要提醒|立即就医|拨打急救|拨打\s*120|急救电话|急症提醒|急诊/.test(body)) {
@@ -213,8 +224,9 @@ function toGuardrail(raw: unknown): GuardrailInfo | undefined {
 function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
   const body = String(data.body ?? data.answer ?? "");
   const emergency = Boolean(data.emergency);
+  const blocked = Boolean(data.blocked);
   const alertFromData = asNonEmptyString(data.alert);
-  const heuristic = extractAlert(body, emergency && !alertFromData);
+  const heuristic = extractAlert(body, emergency && !alertFromData, blocked && !alertFromData);
   const suggestions = Array.isArray(data.suggestions)
     ? data.suggestions.map((s) => String(s))
     : [];
@@ -233,6 +245,7 @@ function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
     alert: alertFromData ?? heuristic.alert,
     alertNote: asNonEmptyString(data.alert_note ?? data.alertNote) ?? heuristic.alertNote,
     emergency,
+    blocked,
     usage,
     traceId: toTraceId(data),
     guardrail: toGuardrail(data.guardrail),
@@ -302,8 +315,8 @@ function typewrite(full: string, onDelta: (text: string) => void, signal: AbortS
 }
 
 async function finishAnswer(h: ChatHandlers, payload: AnswerPayload, signal: AbortSignal) {
-  // 急症必须立刻整段出现，不能再走打字机
-  if (payload.emergency) {
+  // 急症/拦截必须立刻整段出现，不能再走打字机
+  if (payload.emergency || payload.blocked) {
     h.onAnswerStart(payload);
     h.onAnswerDelta(payload.body);
     if (payload.alert) h.onReveal("alert");
@@ -427,6 +440,7 @@ export function sendChat(message: string, sessionId: string, h: ChatHandlers): (
               elapsed: "—",
               agentCount: Number(data.agent_count ?? 1) || 1,
               emergency: routingMode === "emergency",
+              blocked: routingMode === "blocked",
             });
             pushEvent(h, "answer_delta", { message: "开始流出" });
           }
