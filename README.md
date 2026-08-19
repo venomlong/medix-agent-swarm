@@ -6,7 +6,7 @@
 
 ![MediX 智愈 Web 工作台](docs/web-ui.png)
 
-https://github.com/user-attachments/assets/5178d01b-9f6e-4571-b548-635510d57edb
+https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 
 ## 📋 项目概述
 
@@ -731,7 +731,7 @@ Web 工作台（Vite + React），对接 `webapi` 的 SSE 对话与协作过程�
 
 ![MediX 智愈 Web 工作台](docs/web-ui.png)
 
-https://github.com/user-attachments/assets/5178d01b-9f6e-4571-b548-635510d57edb
+https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 
 ```bash
 # 终端 1：后端
