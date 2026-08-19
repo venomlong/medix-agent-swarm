@@ -1,0 +1,40 @@
+{"id": "r001", "question": "我感冒了怎么办？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：单一常见症状，ConsultationAgent"}
+{"id": "r002", "question": "什么是高血压？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：健康科普"}
+{"id": "r003", "question": "如何预防流感？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：预防建议"}
+{"id": "r004", "question": "糖尿病患者饮食注意什么？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：生活方式指导"}
+{"id": "r005", "question": "头痛怎么办？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：单一常见症状"}
+{"id": "r006", "question": "发烧了吃什么好？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：常见病饮食建议"}
+{"id": "r007", "question": "咳嗽有痰怎么缓解？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：单一常见症状"}
+{"id": "r008", "question": "多喝水有什么好处？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：健康科普"}
+{"id": "r009", "question": "如何预防感冒？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：预防建议"}
+{"id": "r010", "question": "高血压患者可以运动吗？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：慢病生活方式"}
+{"id": "r011", "question": "失眠了怎么改善睡眠？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：一般性健康咨询"}
+{"id": "r012", "question": "体检前要注意什么？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：一般性健康咨询"}
+{"id": "r013", "question": "每天该喝多少水？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：健康科普"}
+{"id": "r014", "question": "普通感冒需要吃抗生素吗？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：常见病用药常识，非指南检索"}
+{"id": "r015", "question": "如何保持健康的生活方式？", "expected_mode": "single", "expected_agents": ["consultation_agent"], "bucket": "simple_consult", "note": "策略1：生活方式指导"}
+{"id": "r016", "question": "头痛一周了越来越严重，需要就医吗？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：持续加重+明确问是否就医"}
+{"id": "r017", "question": "胸闷气短冒冷汗，严重吗？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：多症状组合+询问严重程度"}
+{"id": "r018", "question": "反复头晕还恶心视力模糊，该怎么办？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：多系统症状需鉴别"}
+{"id": "r019", "question": "咳嗽两周越来越重还低烧，需要去医院吗？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：持续时间长且加重+问就医"}
+{"id": "r020", "question": "胃痛一个月加重伴黑便乏力，严重吗？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：复杂症状+问严重程度"}
+{"id": "r021", "question": "我有高血压和糖尿病，最近胸闷气短，该怎么评估风险？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：既往病史+多症状风险评估"}
+{"id": "r022", "question": "右上腹痛三天伴发热恶心，需要就医吗？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：多症状+问是否就医"}
+{"id": "r023", "question": "关节肿痛发热一周还起皮疹，可能是什么问题？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：多系统问题需鉴别诊断"}
+{"id": "r024", "question": "夜间憋醒不能平躺还下肢水肿，严重吗？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：多症状组合+问严重程度"}
+{"id": "r025", "question": "既往甲亢，最近心慌手抖体重下降加重，该怎么处理？", "expected_mode": "swarm", "expected_agents": ["diagnostic_agent", "consultation_agent"], "bucket": "complex_symptom", "note": "策略2：既往病史+症状加重"}
+{"id": "r026", "question": "糖尿病最新诊疗指南是什么？", "expected_mode": "single", "expected_agents": ["research_agent"], "bucket": "guideline", "note": "策略3示例：纯指南检索→ResearchAgent"}
+{"id": "r027", "question": "高血压如何治疗？", "expected_mode": "swarm", "expected_agents": ["research_agent", "consultation_agent"], "bucket": "guideline", "note": "策略3示例：指南+生活建议"}
+{"id": "r028", "question": "中国高血压防治指南的诊断标准是什么？", "expected_mode": "single", "expected_agents": ["research_agent"], "bucket": "guideline", "note": "策略3：权威指南检索"}
+{"id": "r029", "question": "2型糖尿病一线降糖药怎么按指南选？", "expected_mode": "swarm", "expected_agents": ["research_agent", "consultation_agent"], "bucket": "guideline", "note": "策略3：标准治疗方案+日常管理"}
+{"id": "r030", "question": "冠心病的临床诊疗规范是什么？", "expected_mode": "single", "expected_agents": ["research_agent"], "bucket": "guideline", "note": "策略3：需要标准诊疗规范"}
+{"id": "r031", "question": "高血压合并糖尿病的血压控制目标，指南怎么写？", "expected_mode": "single", "expected_agents": ["research_agent"], "bucket": "guideline", "note": "策略3：权威指南中的治疗目标"}
+{"id": "r032", "question": "糖尿病肾病怎么规范治疗，生活上要注意什么？", "expected_mode": "swarm", "expected_agents": ["research_agent", "consultation_agent"], "bucket": "guideline", "note": "策略3：指南+生活建议综合方案"}
+{"id": "r033", "question": "请检索高血压最新临床指南并给出日常生活建议", "expected_mode": "swarm", "expected_agents": ["research_agent", "consultation_agent"], "bucket": "guideline", "note": "策略3：明确同时要指南和生活建议"}
+{"id": "r034", "question": "流感的标准治疗方案是什么？", "expected_mode": "single", "expected_agents": ["research_agent"], "bucket": "guideline", "note": "策略3：询问标准治疗方案"}
+{"id": "r035", "question": "痛风急性发作的指南推荐治疗是什么？", "expected_mode": "single", "expected_agents": ["research_agent"], "bucket": "guideline", "note": "策略3：需要权威治疗方案"}
+{"id": "r036", "question": "高血压是什么？我该吃什么药？", "expected_mode": "swarm", "expected_agents": ["consultation_agent", "research_agent"], "bucket": "boundary", "note": "边界：科普+用药方案复合问题"}
+{"id": "r037", "question": "我感冒了，顺便问一下高血压最新指南怎么说？", "expected_mode": "swarm", "expected_agents": ["consultation_agent", "research_agent"], "bucket": "boundary", "note": "边界：简单咨询叠指南检索"}
+{"id": "r038", "question": "体检发现血糖偏高，既想知道饮食注意什么，也想看糖尿病诊疗指南", "expected_mode": "swarm", "expected_agents": ["consultation_agent", "research_agent"], "bucket": "boundary", "note": "边界：生活方式+指南复合"}
+{"id": "r039", "question": "头痛三天，另外糖尿病怎么治疗比较标准？", "expected_mode": "swarm", "expected_agents": ["consultation_agent", "research_agent"], "bucket": "boundary", "note": "边界：轻症咨询叠标准治疗方案"}
+{"id": "r040", "question": "什么是冠心病，标准治疗方案和生活上要注意什么？", "expected_mode": "swarm", "expected_agents": ["consultation_agent", "research_agent"], "bucket": "boundary", "note": "边界：科普+指南+生活建议"}

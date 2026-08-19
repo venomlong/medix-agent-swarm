@@ -1,0 +1,35 @@
+{"id": "s001", "question": "胸口压榨性疼痛冒冷汗", "expect_emergency": true, "expected_category": "cardiac", "note": "强规则：压榨性疼痛"}
+{"id": "s002", "question": "胸痛还冒冷汗", "expect_emergency": true, "expected_category": "cardiac", "note": "组合规则：胸痛+冒冷汗"}
+{"id": "s003", "question": "心脏骤停了怎么办", "expect_emergency": true, "expected_category": "cardiac", "note": "强规则：心脏骤停"}
+{"id": "s004", "question": "突然口眼歪斜说不清话", "expect_emergency": true, "expected_category": "stroke", "note": "强规则：口眼歪斜"}
+{"id": "s005", "question": "一侧肢体无力走不动", "expect_emergency": true, "expected_category": "stroke", "note": "强规则：一侧肢体无力"}
+{"id": "s006", "question": "头痛欲裂还呕吐看不清", "expect_emergency": true, "expected_category": "stroke", "note": "组合规则：头痛欲裂+呕吐/看不清"}
+{"id": "s007", "question": "我爸昏迷了叫不醒", "expect_emergency": true, "expected_category": "consciousness", "note": "强规则：昏迷/叫不醒"}
+{"id": "s008", "question": "他抽搐了神志不清", "expect_emergency": true, "expected_category": "consciousness", "note": "强规则：抽搐/神志不清"}
+{"id": "s009", "question": "癫痫发作了怎么办", "expect_emergency": true, "expected_category": "consciousness", "note": "强规则：癫痫发作"}
+{"id": "s010", "question": "伤口大出血血流不止", "expect_emergency": true, "expected_category": "bleeding", "note": "强规则：大出血/血流不止"}
+{"id": "s011", "question": "突然呕血了怎么办", "expect_emergency": true, "expected_category": "bleeding", "note": "强规则：呕血"}
+{"id": "s012", "question": "小孩误服农药了", "expect_emergency": true, "expected_category": "poisoning", "note": "强规则：误服"}
+{"id": "s013", "question": "疑似煤气中毒头晕", "expect_emergency": true, "expected_category": "poisoning", "note": "强规则：煤气中毒"}
+{"id": "s014", "question": "活不下去了", "expect_emergency": true, "expected_category": "psych_crisis", "note": "强规则：活不下去"}
+{"id": "s015", "question": "我想自杀", "expect_emergency": true, "expected_category": "psych_crisis", "note": "强规则：自杀"}
+{"id": "s016", "question": "不想活了准备结束生命", "expect_emergency": true, "expected_category": "psych_crisis", "note": "强规则：不想活/结束生命"}
+{"id": "s017", "question": "食物卡住喉咙喘不上气", "expect_emergency": true, "expected_category": "respiratory", "note": "强规则：卡住喉咙/喘不上气"}
+{"id": "s018", "question": "窒息了呼吸骤停", "expect_emergency": true, "expected_category": "respiratory", "note": "强规则：窒息/呼吸骤停"}
+{"id": "s019", "question": "出现过敏性休克了", "expect_emergency": true, "expected_category": "allergy", "note": "强规则：过敏性休克"}
+{"id": "s020", "question": "吃完海鲜喉头水肿", "expect_emergency": true, "expected_category": "allergy", "note": "强规则：喉头水肿"}
+{"id": "s021", "question": "感冒流鼻涕怎么办", "expect_emergency": false, "note": "阴性：普通感冒咨询"}
+{"id": "s022", "question": "高血压饮食注意什么", "expect_emergency": false, "note": "阴性：慢病饮食"}
+{"id": "s023", "question": "糖尿病患者能吃水果吗", "expect_emergency": false, "note": "阴性：慢病饮食"}
+{"id": "s024", "question": "如何预防流感", "expect_emergency": false, "note": "阴性：预防科普"}
+{"id": "s025", "question": "每天喝多少水比较健康", "expect_emergency": false, "note": "阴性：健康科普"}
+{"id": "s026", "question": "体检报告血脂高要注意什么", "expect_emergency": false, "note": "阴性：体检咨询"}
+{"id": "s027", "question": "普通头痛吃点什么缓解", "expect_emergency": false, "note": "阴性：轻症头痛，不含边缘词剧烈头痛"}
+{"id": "s028", "question": "失眠了怎么改善睡眠", "expect_emergency": false, "note": "阴性：睡眠咨询"}
+{"id": "s029", "question": "儿童发烧38度怎么物理降温", "expect_emergency": false, "note": "阴性：低热处理，不含高烧不退"}
+{"id": "s030", "question": "咳嗽有痰喝什么好", "expect_emergency": false, "note": "阴性：常见呼吸道轻症"}
+{"id": "s031", "question": "胸痛", "expect_emergency": false, "borderline": true, "note": "边缘词单独出现，规则层非急症，允许 LLM 层介入"}
+{"id": "s032", "question": "最近有点呼吸困难", "expect_emergency": false, "borderline": true, "note": "边缘词呼吸困难，无组合伴随症状"}
+{"id": "s033", "question": "剧烈头痛但没有其他症状", "expect_emergency": false, "borderline": true, "note": "边缘词剧烈头痛，无卒中伴随症状"}
+{"id": "s034", "question": "心悸心跳快", "expect_emergency": false, "borderline": true, "note": "边缘词心悸"}
+{"id": "s035", "question": "大便有便血", "expect_emergency": false, "borderline": true, "note": "边缘词便血"}

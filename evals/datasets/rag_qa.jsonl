@@ -1,0 +1,30 @@
+{"id": "k001", "question": "高血压患者每天钠摄入量应控制在多少？", "expected_doc_ids": ["lifestyle_01_lifestyle_hypertension"], "note": "生活方式：每日钠摄入<2g，约5g食盐"}
+{"id": "k002", "question": "高血压患者每日测血压应该早晚各测一次吗？", "expected_doc_ids": ["lifestyle_01_lifestyle_hypertension"], "note": "生活方式：每日测量血压早晚各一次"}
+{"id": "k003", "question": "高血压患者钾摄入推荐每天多少毫克？", "expected_doc_ids": ["lifestyle_01_lifestyle_hypertension"], "note": "生活方式：每日推荐3500-5000mg钾"}
+{"id": "k004", "question": "糖尿病患者餐后多久运动比较合适？", "expected_doc_ids": ["lifestyle_02_lifestyle_diabetes"], "note": "生活方式：餐后1-2小时运动最佳"}
+{"id": "k005", "question": "糖尿病低血糖时应该立刻吃多少碳水化合物？", "expected_doc_ids": ["lifestyle_02_lifestyle_diabetes"], "note": "生活方式：立即进食15-20g碳水化合物"}
+{"id": "k006", "question": "开封后的胰岛素应放在几度冷藏保存？", "expected_doc_ids": ["lifestyle_02_lifestyle_diabetes"], "note": "生活方式：妥善保存2-8°C冷藏"}
+{"id": "k007", "question": "感冒时每天建议喝多少水？", "expected_doc_ids": ["lifestyle_03_lifestyle_cold"], "note": "生活方式：每日饮水量2000-2500ml"}
+{"id": "k008", "question": "普通感冒需不需要用抗生素？", "expected_doc_ids": ["lifestyle_03_lifestyle_cold"], "note": "生活方式：普通感冒不需要抗生素"}
+{"id": "k009", "question": "感冒发热期间能不能剧烈运动？", "expected_doc_ids": ["lifestyle_03_lifestyle_cold"], "note": "生活方式：发热期间卧床休息，避免剧烈运动"}
+{"id": "k010", "question": "健康成年人每天饮水量大概多少毫升？", "expected_doc_ids": ["lifestyle_04_lifestyle_general_health"], "note": "通用健康：1500-2000毫升约7-8杯"}
+{"id": "k011", "question": "成年人每天建议睡几个小时？", "expected_doc_ids": ["lifestyle_04_lifestyle_general_health"], "note": "通用健康：成年人7-9小时/天"}
+{"id": "k012", "question": "一般健康成年人每天食盐应少于多少克？", "expected_doc_ids": ["lifestyle_04_lifestyle_general_health"], "note": "通用健康：每天食盐<6克"}
+{"id": "k013", "question": "胸痛放射到左臂下颌时应该怎么紧急处理？", "expected_doc_ids": ["lifestyle_05_symptoms_emergency"], "note": "急症识别：胸痛放射至左臂/下颌，拨打120"}
+{"id": "k014", "question": "什么是有生以来最严重的雷击样头痛？", "expected_doc_ids": ["lifestyle_05_symptoms_emergency"], "note": "急症识别：雷击样头痛危险征象"}
+{"id": "k015", "question": "口温多少度算高热？超高热又是多少？", "expected_doc_ids": ["lifestyle_05_symptoms_emergency"], "note": "急症识别：高热39.1-41.0°C，超高热>41.0°C"}
+{"id": "k016", "question": "原发性高血压的ICD-10编码是什么？", "expected_doc_ids": ["disease_classification_10_icd10_cardiovascular"], "note": "ICD-10：高血压 I10"}
+{"id": "k017", "question": "慢性缺血性心脏病冠心病的ICD-10编码？", "expected_doc_ids": ["disease_classification_10_icd10_cardiovascular"], "note": "ICD-10：冠心病 I25"}
+{"id": "k018", "question": "心力衰竭的ICD-10编码是I几？", "expected_doc_ids": ["disease_classification_10_icd10_cardiovascular"], "note": "ICD-10：心力衰竭 I50"}
+{"id": "k019", "question": "未特指糖尿病的ICD-10编码是什么？", "expected_doc_ids": ["disease_classification_11_icd10_endocrine"], "note": "ICD-10：糖尿病 E14"}
+{"id": "k020", "question": "甲状腺功能减退症的ICD-10编码是E多少？", "expected_doc_ids": ["disease_classification_11_icd10_endocrine"], "note": "ICD-10：甲减 E03"}
+{"id": "k021", "question": "肥胖症的ICD-10编码是什么？", "expected_doc_ids": ["disease_classification_11_icd10_endocrine"], "note": "ICD-10：肥胖症 E66"}
+{"id": "k022", "question": "脑膜炎球菌性脑膜炎的ICD-10编码是多少？", "expected_doc_ids": ["disease_classification_12_icd10_infectious"], "note": "传染病编码：A39.0"}
+{"id": "k023", "question": "带状疱疹的ICD-10编码是B多少？", "expected_doc_ids": ["disease_classification_12_icd10_infectious"], "note": "传染病编码：带状疱疹 B02"}
+{"id": "k024", "question": "急性上呼吸道感染普通感冒的ICD编码是J06吗？", "expected_doc_ids": ["disease_classification_12_icd10_infectious"], "note": "传染病编码：急性上呼吸道感染 J06"}
+{"id": "k025", "question": "中国高血压防治指南诊室血压诊断切点是多少？", "expected_doc_ids": ["clinical_guideline_20_guideline_hypertension"], "note": "2023指南：诊室血压≥140/90mmHg"}
+{"id": "k026", "question": "高血压家庭血压监测的诊断标准是多少毫米汞柱？", "expected_doc_ids": ["clinical_guideline_20_guideline_hypertension"], "note": "2023指南：家庭血压≥135/85mmHg"}
+{"id": "k027", "question": "八十岁以上高龄老年人高血压治疗目标血压是多少？", "expected_doc_ids": ["clinical_guideline_20_guideline_hypertension"], "note": "2023指南：≥80岁目标<150/90mmHg"}
+{"id": "k028", "question": "中国2型糖尿病指南空腹血糖达到多少可以诊断？", "expected_doc_ids": ["clinical_guideline_21_guideline_diabetes"], "note": "2024指南：空腹血糖≥7.0 mmol/L"}
+{"id": "k029", "question": "2型糖尿病一般成年患者糖化血红蛋白控制目标是多少？", "expected_doc_ids": ["clinical_guideline_21_guideline_diabetes"], "note": "2024指南：一般成年患者 HbA1c <7.0%"}
+{"id": "k030", "question": "2型糖尿病合并心力衰竭时指南首选哪类降糖药？", "expected_doc_ids": ["clinical_guideline_21_guideline_diabetes"], "note": "2024指南：合并心衰首选 SGLT2i"}
