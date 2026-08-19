@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AnswerPayload, AnswerReveal, SourceRef } from "../types";
+import type { AnswerPayload, AnswerReveal, AnswerUsage, SourceRef } from "../types";
 import { AgentAvatarGroup } from "./AgentAvatar";
 
 type Props = {
@@ -18,6 +18,19 @@ const DEFAULT_REVEAL: AnswerReveal = {
 function scoreLabel(score: number): string {
   const pct = score <= 1 ? Math.round(score * 100) : Math.round(score);
   return `${pct}%`;
+}
+
+function formatYuan(cost: number): string {
+  if (!Number.isFinite(cost) || cost <= 0) return "¥0";
+  if (cost >= 1) return `¥${cost.toFixed(2)}`;
+  if (cost >= 0.01) return `¥${cost.toFixed(3)}`;
+  return `¥${cost.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+}
+
+function usageHeadLabel(usage?: AnswerUsage): string {
+  if (!usage) return "";
+  const tokens = Math.max(0, Math.round(usage.totalTokens));
+  return `${tokens.toLocaleString("zh-CN")} tok · ${formatYuan(usage.cost)}`;
 }
 
 function SourcePills({ sources }: { sources: SourceRef[] }) {
@@ -56,6 +69,7 @@ function SourcePills({ sources }: { sources: SourceRef[] }) {
 export function AnswerCard({ answer, streaming, reveal }: Props) {
   const r = reveal ?? DEFAULT_REVEAL;
   const emergency = Boolean(answer.emergency);
+  const usageText = usageHeadLabel(answer.usage);
   return (
     <article className={`answer${emergency ? " emergency" : ""}`}>
       <div className="answer-head">
@@ -64,8 +78,13 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
           {emergency ? "急症分诊 · 已短路常规协作流程" : `${answer.agentCount} 个专业 Agent 协作回答`}
         </span>
         <span style={{ flex: 1 }} />
-        <span className="mono muted" style={{ fontSize: 12 }}>
+        <span
+          className="mono muted"
+          style={{ fontSize: 12, whiteSpace: "nowrap" }}
+          title={answer.traceId ? `trace ${answer.traceId}` : undefined}
+        >
           {answer.elapsed}
+          {usageText ? ` · ${usageText}` : ""}
         </span>
       </div>
 

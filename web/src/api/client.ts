@@ -6,6 +6,7 @@
 
 import type {
   AnswerPayload,
+  AnswerUsage,
   ChatMessage,
   FixRecord,
   KnowledgeDoc,
@@ -151,6 +152,23 @@ function toSourceRef(raw: unknown): SourceRef | null {
   };
 }
 
+function toUsage(raw: unknown): AnswerUsage | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const u = raw as Record<string, unknown>;
+  return {
+    totalTokens: Number(u.total_tokens ?? u.totalTokens ?? 0) || 0,
+    cost: Number(u.cost ?? 0) || 0,
+    llmCalls: Number(u.llm_calls ?? u.llmCalls ?? 0) || 0,
+  };
+}
+
+function toTraceId(data: Record<string, unknown>): string | undefined {
+  const raw = data.trace_id ?? data.traceId;
+  if (typeof raw !== "string") return undefined;
+  const id = raw.trim();
+  return id || undefined;
+}
+
 function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
   const body = String(data.body ?? data.answer ?? "");
   const heuristic = extractAlert(body);
@@ -171,6 +189,8 @@ function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
     alert: (data.alert as string | undefined) ?? heuristic.alert,
     alertNote: (data.alert_note as string | undefined) ?? heuristic.alertNote,
     emergency: Boolean(data.emergency),
+    usage: toUsage(data.usage),
+    traceId: toTraceId(data),
   };
 }
 

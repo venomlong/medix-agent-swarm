@@ -45,6 +45,8 @@ export const SWARM_ANSWER: Omit<AnswerPayload, "elapsed"> = {
   ] satisfies SourceRef[],
   disclaimer: "以上分析基于多个专业 Agent 的协作，仅供参考，不能替代医生诊断。",
   agentCount: 3,
+  usage: { totalTokens: 1840, cost: 0.012, llmCalls: 4 },
+  traceId: "demo12ab34cd",
 };
 
 export const FOLLOWUP_ANSWER: Omit<AnswerPayload, "elapsed"> = {
@@ -181,6 +183,9 @@ export const DASHBOARD = {
   autoFix: 7,
   disclaimerFix: 5,
   emergencyFix: 2,
+  totalTokens: 18420,
+  totalCost: 0.0864,
+  llmCalls: 41,
   bars: [
     { day: "周一", value: 8, height: 42 },
     { day: "周二", value: 12, height: 64 },

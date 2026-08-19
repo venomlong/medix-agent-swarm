@@ -31,6 +31,12 @@ export interface SourceRef {
   snippet: string;
 }
 
+export interface AnswerUsage {
+  totalTokens: number;
+  cost: number;
+  llmCalls: number;
+}
+
 export interface AnswerPayload {
   body: string;
   alert?: string;
@@ -42,6 +48,8 @@ export interface AnswerPayload {
   agentCount: number;
   timedOut?: boolean;
   emergency?: boolean;
+  usage?: AnswerUsage;
+  traceId?: string;
 }
 
 export interface ChatMessage {
@@ -145,4 +153,7 @@ export interface RuntimeStatsPayload {
   auto_fix: number;
   disclaimer_fix: number;
   emergency_fix: number;
+  total_tokens: number;
+  total_cost: number;
+  llm_calls: number;
 }

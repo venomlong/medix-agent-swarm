@@ -3,6 +3,17 @@ import { getRuntimeStats, USE_MOCK } from "../api/client";
 import { DASHBOARD } from "../mock/data";
 import type { RuntimeStatsPayload } from "../types";
 
+function formatTokenCount(n: number): string {
+  return Math.max(0, Math.round(n)).toLocaleString("zh-CN");
+}
+
+function formatYuan(cost: number): string {
+  if (!Number.isFinite(cost) || cost <= 0) return "¥0";
+  if (cost >= 1) return `¥${cost.toFixed(2)}`;
+  if (cost >= 0.01) return `¥${cost.toFixed(3)}`;
+  return `¥${cost.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+}
+
 const EMPTY: RuntimeStatsPayload = {
   scope: "current_process",
   label: "本次服务启动后",
@@ -20,6 +31,9 @@ const EMPTY: RuntimeStatsPayload = {
   auto_fix: 0,
   disclaimer_fix: 0,
   emergency_fix: 0,
+  total_tokens: 0,
+  total_cost: 0,
+  llm_calls: 0,
 };
 
 export function Dashboard() {
@@ -51,6 +65,9 @@ export function Dashboard() {
   const autoFix = mock ? DASHBOARD.autoFix : stats?.auto_fix ?? 0;
   const disclaimerFix = mock ? DASHBOARD.disclaimerFix : stats?.disclaimer_fix ?? 0;
   const emergencyFix = mock ? DASHBOARD.emergencyFix : stats?.emergency_fix ?? 0;
+  const totalTokens = mock ? DASHBOARD.totalTokens : stats?.total_tokens ?? 0;
+  const totalCost = mock ? DASHBOARD.totalCost : stats?.total_cost ?? 0;
+  const llmCalls = mock ? DASHBOARD.llmCalls : stats?.llm_calls ?? 0;
   const swarmCount = stats?.swarm_count ?? 0;
   const singleCount = stats?.single_count ?? 0;
   const barHeight = chatCount > 0 ? 80 : 8;
@@ -64,7 +81,7 @@ export function Dashboard() {
       <p className="page-lede">
         {mock
           ? "会话量、Swarm 占比、平均耗时与安全自动修复次数，一眼可知系统运行状态。"
-          : "计数来自当前 webapi 进程内存，服务重启后归零。没有按日聚合存储，因此不展示虚构的近 7 天曲线。"}
+          : "计数来自当前 webapi 进程内存，服务重启后归零。Token / 成本 / LLM 调用次数同样为本进程累计。"}
       </p>
       {error ? <div className="card empty-hint">{error}</div> : null}
 
@@ -94,6 +111,19 @@ export function Dashboard() {
           <div className="s">
             免责声明 {disclaimerFix} · 就医提醒 {emergencyFix}
           </div>
+        </div>
+      </div>
+
+      <div className="grid-2" style={{ marginTop: 12 }}>
+        <div className="card kpi">
+          <div className="k">累计 Token</div>
+          <div className="n">{formatTokenCount(totalTokens)}</div>
+          <div className="s">LLM 调用 {llmCalls} 次 · 本进程累计</div>
+        </div>
+        <div className="card kpi">
+          <div className="k">累计成本</div>
+          <div className="n">{formatYuan(totalCost)}</div>
+          <div className="s">{mock ? "示意：按当前模型定价估算" : "按当前模型定价估算 · 人民币"}</div>
         </div>
       </div>
 
