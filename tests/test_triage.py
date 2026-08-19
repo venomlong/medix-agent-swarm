@@ -51,6 +51,7 @@ class EmergencyTriageRuleTests(unittest.TestCase):
         self.assertTrue(payload["alert"])
         self.assertIn("120", payload["answer"])
         self.assertFalse(payload["swarm_enabled"])
+        self.assertEqual(payload["sources"], [])
 
 
 if __name__ == "__main__":

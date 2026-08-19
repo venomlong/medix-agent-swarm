@@ -6,6 +6,8 @@ import asyncio
 from typing import Dict, Any
 from loguru import logger
 
+from core.source_collector import register_hits
+
 # 全局知识库实例
 _kb_instance = None
 
@@ -46,6 +48,7 @@ async def disease_code(disease_name: str) -> Dict[str, Any]:
 
     if results and results[0]["score"] > 0.1:
         doc = results[0]
+        register_hits([doc])
         metadata = doc["metadata"]
 
         # 从内容中提取 ICD-10 编码（简单解析）

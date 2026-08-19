@@ -154,7 +154,16 @@ data: <JSON>
   "timed_out": false,
   "alert": null,
   "alert_note": null,
-  "sources": [],
+  "sources": [
+    {
+      "id": "42",
+      "title": "高血压",
+      "source": "高血压_生活方式.txt",
+      "type": "lifestyle",
+      "score": 0.83,
+      "snippet": "高血压患者每日钠摄入应控制在 2g 以内……"
+    }
+  ],
   "emergency": false,
   "guardrail": null,
   "swarm_enabled": true,
@@ -175,7 +184,18 @@ data: <JSON>
 
 未命中时为 `null` / 省略。急症短路路径不过护栏。
 
-M1 允许：`alert` / `sources` 为空；若答案正文含「重要提醒」「就医」，前端可先从 `body` 启发式拆条（或暂不拆）。结构化拆分标为 M1.5。
+`sources` 为知识库 chunk 引用列表（无检索命中或急症短路时为 `[]`，不伪造）。每条：
+
+| 字段 | 说明 |
+|------|------|
+| `id` | Milvus 主键（字符串） |
+| `title` | 文档标题（`metadata.disease` 或 `source`） |
+| `source` | `metadata.source`，缺省为「医学知识库」 |
+| `type` | `metadata.type`（如 lifestyle / clinical_guideline） |
+| `score` | COSINE 相似度，越大越相关 |
+| `snippet` | `content` 前 120 字 |
+
+M1 允许：`alert` 为空；若答案正文含「重要提醒」「就医」，前端可先从 `body` 启发式拆条（或暂不拆）。结构化拆分标为 M1.5。
 
 **错误帧**
 
@@ -218,8 +238,8 @@ HTTP 层：非法 JSON → 400（非 SSE）；处理中异常 → SSE `error` �
 | `answer_done.body` | 答案卡正文 | 可；无流式则整段出现 |
 | `answer_done.suggestions/disclaimer` | 建议列表、脚注 | 可（正则抽取，可能空） |
 | `timeout_occurred` + `timed_out` | `TimeoutFallback`、节点 `timeout` 态 | 可；工作台目前 **从不设 timedOut** |
-| `answer_done.alert` | 陶土色警示条 | **缺口**：AutoFixer 只改字符串 |
-| `answer_done.sources` | 来源标签 | **缺口**：检索结果留在 skill 内部 |
+| `answer_done.alert` | 陶土色警示条 | 可；急症路径有结构化 `alert` |
+| `answer_done.sources` | 参考来源卡片（标题 + 相关度 + 可展开摘录） | 可；Skill 命中后经 `source_collector` 汇总 |
 | Skill 标签逐个亮起 | 时间线 `skills[].active` | **缺口**：无事件 |
 | `answer_delta` | 逐字打出 | **缺口**：LLM 非流式 |
 | Mem0 相似案例 | 记忆页 | M2；`historical_cases` 仅进 prompt |

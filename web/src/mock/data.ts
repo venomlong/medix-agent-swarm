@@ -4,6 +4,7 @@ import type {
   KnowledgeDoc,
   MemorySession,
   SimilarCase,
+  SourceRef,
   TimelineStep,
 } from "../types";
 
@@ -25,10 +26,23 @@ export const SWARM_ANSWER: Omit<AnswerPayload, "elapsed"> = {
     "一周内前往心内科或老年科门诊做系统评估。",
   ],
   sources: [
-    "依据 · 《中国高血压防治指南》",
-    "知识库 · 语义检索 2 条",
-    "相似历史案例 · Mem0 ×2",
-  ],
+    {
+      id: "20",
+      title: "中国高血压防治指南（2023 年修订版）",
+      source: "中国高血压防治指南_2023.txt",
+      type: "guideline",
+      score: 0.94,
+      snippet: "诊室血压 ≥140/90 mmHg 可诊断高血压。指南强调家庭血压监测与动态血压在诊断、疗效评估中的作用。",
+    },
+    {
+      id: "01",
+      title: "高血压生活方式建议",
+      source: "高血压_生活方式.txt",
+      type: "lifestyle",
+      score: 0.91,
+      snippet: "高血压患者的生活方式干预是药物治疗的基础。建议低盐饮食，每日钠摄入控制在 2g 以内。",
+    },
+  ] satisfies SourceRef[],
   disclaimer: "以上分析基于多个专业 Agent 的协作，仅供参考，不能替代医生诊断。",
   agentCount: 3,
 };
@@ -41,7 +55,16 @@ export const FOLLOWUP_ANSWER: Omit<AnswerPayload, "elapsed"> = {
     "若存在明显打鼾或憋醒，优先排查睡眠呼吸暂停；",
     "继续规律测压，不要自行调整降压药。",
   ],
-  sources: ["依据 · 《中国高血压防治指南》", "知识库 · 语义检索 1 条"],
+  sources: [
+    {
+      id: "20",
+      title: "中国高血压防治指南（2023 年修订版）",
+      source: "中国高血压防治指南_2023.txt",
+      type: "guideline",
+      score: 0.94,
+      snippet: "诊室血压 ≥140/90 mmHg 可诊断高血压。指南强调家庭血压监测与动态血压在诊断、疗效评估中的作用。",
+    },
+  ] satisfies SourceRef[],
   disclaimer: "以上分析仅供参考，不能替代医生诊断。",
   agentCount: 1,
 };
@@ -54,7 +77,16 @@ export const SIMPLE_ANSWER: Omit<AnswerPayload, "elapsed"> = {
     "运动或天气炎热时可适当增加；",
     "夜尿多者减少睡前大量饮水。",
   ],
-  sources: ["知识库 · 生活方式建议"],
+  sources: [
+    {
+      id: "04",
+      title: "一般健康生活方式",
+      source: "一般健康_生活方式.txt",
+      type: "lifestyle",
+      score: 0.61,
+      snippet: "均衡饮食、规律作息、适量运动与戒烟限酒是通用健康建议。每日蔬菜水果充足，限制加工食品与过量盐糖。",
+    },
+  ] satisfies SourceRef[],
   disclaimer: "以上分析仅供参考，不能替代医生诊断。",
   agentCount: 1,
 };

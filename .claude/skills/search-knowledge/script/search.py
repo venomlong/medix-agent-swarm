@@ -6,6 +6,8 @@ import asyncio
 from typing import Dict, Any
 from loguru import logger
 
+from core.source_collector import register_hits
+
 # 全局知识库实例（避免重复加载模型）
 _kb_instance = None
 
@@ -46,6 +48,7 @@ async def search_knowledge(query: str, max_results: int = 5) -> Dict[str, Any]:
         top_k=max_results,
         filter_type=None,
     )
+    register_hits(results)
 
     # 格式化结果
     formatted_results = []

@@ -16,6 +16,7 @@ import type {
   RuntimeStatsPayload,
   ShortTermChatMessage,
   SimilarCase,
+  SourceRef,
   StreamEvent,
   TimelineStep,
 } from "../types";
@@ -130,13 +131,35 @@ function extractAlert(body: string): Pick<AnswerPayload, "alert" | "alertNote"> 
   return {};
 }
 
+function toSourceRef(raw: unknown): SourceRef | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const s = raw as Record<string, unknown>;
+  const id = String(s.id ?? "").trim();
+  const title = String(s.title ?? s.source ?? "").trim();
+  if (!id && !title) {
+    return null;
+  }
+  return {
+    id: id || title,
+    title: title || "医学知识库条目",
+    source: String(s.source ?? "医学知识库"),
+    type: s.type != null && String(s.type) ? String(s.type) : undefined,
+    score: Number(s.score ?? 0) || 0,
+    snippet: String(s.snippet ?? ""),
+  };
+}
+
 function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
   const body = String(data.body ?? data.answer ?? "");
   const heuristic = extractAlert(body);
   const suggestions = Array.isArray(data.suggestions)
     ? data.suggestions.map((s) => String(s))
     : [];
-  const sources = Array.isArray(data.sources) ? data.sources.map((s) => String(s)) : [];
+  const sources = Array.isArray(data.sources)
+    ? data.sources.map(toSourceRef).filter((s): s is SourceRef => s != null)
+    : [];
   return {
     body,
     suggestions,

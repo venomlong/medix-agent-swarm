@@ -22,12 +22,21 @@ export interface StreamEvent {
   name: string;
 }
 
+export interface SourceRef {
+  id: string;
+  title: string;
+  source: string;
+  type?: string;
+  score: number;
+  snippet: string;
+}
+
 export interface AnswerPayload {
   body: string;
   alert?: string;
   alertNote?: string;
   suggestions: string[];
-  sources: string[];
+  sources: SourceRef[];
   disclaimer: string;
   elapsed: string;
   agentCount: number;

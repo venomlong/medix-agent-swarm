@@ -1,4 +1,5 @@
-import type { AnswerPayload, AnswerReveal } from "../types";
+import { useState } from "react";
+import type { AnswerPayload, AnswerReveal, SourceRef } from "../types";
 import { AgentAvatarGroup } from "./AgentAvatar";
 
 type Props = {
@@ -13,6 +14,44 @@ const DEFAULT_REVEAL: AnswerReveal = {
   sources: true,
   disclaimer: true,
 };
+
+function scoreLabel(score: number): string {
+  const pct = score <= 1 ? Math.round(score * 100) : Math.round(score);
+  return `${pct}%`;
+}
+
+function SourcePills({ sources }: { sources: SourceRef[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = sources.find((s) => s.id === openId) ?? null;
+  return (
+    <div>
+      <strong style={{ fontSize: 13.5 }}>参考来源</strong>
+      <div className="pills" style={{ marginTop: 6 }}>
+        {sources.map((src) => {
+          const active = openId === src.id;
+          return (
+            <button
+              key={src.id}
+              type="button"
+              className={`pill wood source${active ? " open" : ""}`}
+              onClick={() => setOpenId(active ? null : src.id)}
+              aria-expanded={active}
+            >
+              {src.title}
+              {src.score > 0 ? ` · ${scoreLabel(src.score)}` : ""}
+            </button>
+          );
+        })}
+      </div>
+      {open ? (
+        <p className="source-snippet">
+          {open.snippet || "（无摘录）"}
+          {open.source ? <span className="muted"> · {open.source}</span> : null}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function AnswerCard({ answer, streaming, reveal }: Props) {
   const r = reveal ?? DEFAULT_REVEAL;
@@ -55,15 +94,7 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
         </div>
       ) : null}
 
-      {r.sources && answer.sources.length > 0 ? (
-        <div className="pills">
-          {answer.sources.map((src) => (
-            <span key={src} className="pill wood">
-              {src}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      {r.sources && answer.sources.length > 0 ? <SourcePills sources={answer.sources} /> : null}
 
       {r.disclaimer ? (
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>

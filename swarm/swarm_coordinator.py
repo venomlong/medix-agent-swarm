@@ -21,6 +21,7 @@ from .events import Event, EventType
 from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
 from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongTermMemory
 from memory.short_term import get_redis_config
+from core.source_collector import get_sources, start_collect, stop_collect
 from safety import EmergencyTriage, build_emergency_result
 from validation.guardrail import OutputGuardrail, apply_guardrail_to_result
 
@@ -162,16 +163,36 @@ class SwarmCoordinator:
 
         logger.info(f"Processing question (session={session_id}): {question[:50]}...")
 
+        collect_token = start_collect()
+        try:
+            return await self._process_inner(
+                question=question,
+                context=context,
+                session_id=session_id,
+                start_time=start_time,
+            )
+        finally:
+            stop_collect(collect_token)
+
+    async def _process_inner(
+        self,
+        question: str,
+        context: Optional[Dict[str, Any]],
+        session_id: str,
+        start_time: datetime,
+    ) -> Dict[str, Any]:
         # ===== Step 0: 急症分诊（fail-fast）=====
         # 命中急症时跳过记忆检索、任务分解和 Swarm，秒级返回结构化急救指引
         triage_result = await self.triage.triage(question)
         if triage_result.is_emergency:
-            return await self._handle_emergency(
+            result = await self._handle_emergency(
                 question=question,
                 triage_result=triage_result,
                 session_id=session_id,
                 start_time=start_time,
             )
+            self._attach_sources(result)
+            return result
 
         # ===== 统一的记忆检索（所有模式都使用）=====
         # 1. 检索长期记忆（相似历史会话）
@@ -260,6 +281,7 @@ class SwarmCoordinator:
             final_answer = result.get('answer', '')
 
             # Swarm 模式已经在 _process_with_swarm 中保存了长期记忆，直接返回
+            self._attach_sources(result)
             return result
 
         else:
@@ -322,7 +344,13 @@ class SwarmCoordinator:
         except Exception as e:
             logger.error(f"Failed to save to long-term memory: {e}")
 
+        self._attach_sources(result)
         return result
+
+    @staticmethod
+    def _attach_sources(result: Dict[str, Any]) -> None:
+        """写入去重后的 RAG 引用来源。护栏只改 answer，不会丢掉本字段。"""
+        result["sources"] = get_sources()
 
     async def _handle_emergency(
         self,

@@ -6,6 +6,8 @@ import asyncio
 from typing import Dict, Any, List
 from loguru import logger
 
+from core.source_collector import register_hits
+
 # 全局知识库实例（避免重复加载模型）
 _kb_instance = None
 
@@ -114,6 +116,7 @@ async def analyze_symptoms(symptoms: str) -> Dict[str, Any]:
                     filter_type=None,
                 )
                 if results and results[0]["score"] > 0.5:
+                    register_hits([results[0]])
                     kb_insights.append({
                         "disease": disease,
                         "info": results[0]["content"][:200]  # 限制长度
