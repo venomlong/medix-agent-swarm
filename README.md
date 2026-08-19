@@ -6,9 +6,7 @@
 
 ![MediX 智愈 Web 工作台](docs/web-ui.png)
 
-<video src="https://github.com/venomlong/medix-agent-swarm/raw/main/docs/web-ui-demo.mp4" controls width="100%"></video>
-
-[▶ 观看 Web 工作台演示视频](docs/web-ui-demo.mp4)
+https://github.com/user-attachments/assets/5178d01b-9f6e-4571-b548-635510d57edb
 
 ## 📋 项目概述
 
@@ -733,7 +731,7 @@ Web 工作台（Vite + React），对接 `webapi` 的 SSE 对话与协作过程�
 
 ![MediX 智愈 Web 工作台](docs/web-ui.png)
 
-演示视频：[▶ 观看 Web 工作台演示](docs/web-ui-demo.mp4)
+https://github.com/user-attachments/assets/5178d01b-9f6e-4571-b548-635510d57edb
 
 ```bash
 # 终端 1：后端
