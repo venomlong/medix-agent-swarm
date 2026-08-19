@@ -19,6 +19,8 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
+from core.log_privacy import install_log_privacy
+
 from .bridge import (
     CoordinatorRunner,
     attach_live_listener,
@@ -38,6 +40,9 @@ from .reads import (
 )
 from .runtime import STATS
 from .sse import format_sse, with_common
+
+# uvicorn 加载本模块即挂上全局日志脱敏，覆盖 Coordinator / Agent Loop 的 question 日志
+install_log_privacy()
 
 SENTINEL: Tuple[Optional[str], Optional[Dict[str, Any]]] = (None, None)
 

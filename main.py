@@ -13,11 +13,13 @@ from loguru import logger
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+from core.log_privacy import install_log_privacy
 from swarm import process_with_swarm
 
 
 def setup_logger(verbose: bool = False):
-    """配置日志"""
+    """配置日志，并挂上全局 PII 脱敏 patcher。"""
+    install_log_privacy()
     logger.remove()
     if verbose:
         logger.add(

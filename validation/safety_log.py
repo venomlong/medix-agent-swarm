@@ -4,12 +4,12 @@
 AutoFixer 原先只写进程内 deque，重启后安全页为空。
 这里追加写入 memory/swarm/safety_log.jsonl，供 /api/safety/fixes 重启后仍可读。
 落盘内容做轻量 PII 掩码（手机号/身份证/邮箱），避免病历里的联系方式进日志。
+掩码规则复用 core.log_privacy.mask_pii，与全局日志脱敏保持一致。
 """
 from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -17,11 +17,9 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-_LOCK = threading.Lock()
+from core.log_privacy import mask_pii
 
-_PHONE_RE = re.compile(r"1[3-9]\d{9}")
-_ID_RE = re.compile(r"\d{17}[\dXx]")
-_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_LOCK = threading.Lock()
 
 
 def get_log_path() -> Path:
@@ -29,16 +27,6 @@ def get_log_path() -> Path:
     if override:
         return Path(override)
     return Path(__file__).resolve().parent.parent / "memory" / "swarm" / "safety_log.jsonl"
-
-
-def mask_pii(text: str) -> str:
-    """掩码手机号、18 位身份证、邮箱。空值原样返回。"""
-    if not text:
-        return text
-    text = _PHONE_RE.sub(lambda m: m.group(0)[0] + "*" * 10, text)
-    text = _ID_RE.sub(lambda m: m.group(0)[:4] + "*" * 10 + m.group(0)[-4:], text)
-    text = _EMAIL_RE.sub(lambda m: m.group(0)[0] + "***@***", text)
-    return text
 
 
 def _mask_value(value: Any) -> Any:
