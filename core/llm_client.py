@@ -7,7 +7,7 @@ import os
 import sys
 import asyncio
 import json
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from dataclasses import dataclass
 from openai import AsyncOpenAI
 from loguru import logger
@@ -15,6 +15,40 @@ from loguru import logger
 # 加载项目根目录的上层目录（medix-agent-swarm 的父目录）的 config.py
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from config import LLM_CONFIG
+
+
+def _usage_token_pair(usage: Any) -> Optional[Tuple[int, int]]:
+    """从 response.usage / chunk.usage 取出 prompt/completion；缺失则 None。"""
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        prompt = usage.get("prompt_tokens")
+        completion = usage.get("completion_tokens")
+    else:
+        prompt = getattr(usage, "prompt_tokens", None)
+        completion = getattr(usage, "completion_tokens", None)
+    if prompt is None and completion is None:
+        return None
+    try:
+        return int(prompt or 0), int(completion or 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _record_response_usage(source: Any) -> None:
+    """写当前 Trace + GLOBAL_USAGE。usage 为 None 时跳过，记账失败不影响主流程。"""
+    if source is None:
+        return
+    usage = getattr(source, "usage", source)
+    pair = _usage_token_pair(usage)
+    if pair is None:
+        return
+    try:
+        from core.tracing import record_llm_usage
+
+        record_llm_usage(pair[0], pair[1])
+    except Exception as exc:
+        logger.debug(f"Skip llm usage accounting: {exc}")
 
 
 @dataclass
@@ -118,6 +152,7 @@ class LLMClient:
                 max_tokens=max_tokens,
                 **kwargs
             )
+            _record_response_usage(response)
 
             content = response.choices[0].message.content
             logger.debug(f"LLM response length: {len(content) if content else 0} chars")
@@ -133,16 +168,24 @@ class LLMClient:
         on_delta: Optional[Callable[[str], None]] = None,
     ) -> LLMResponse:
         """消费 chat.completions 流，拼出完整 LLMResponse；content 增量可回调。"""
+        # 拷贝后再加 stream_options，避免流式失败回退非流式时把该字段带进 create()
+        params = dict(request_params)
+        params["stream_options"] = {"include_usage": True}
         stream = await self.client.chat.completions.create(
-            **request_params,
+            **params,
             stream=True,
         )
         content_parts: List[str] = []
         tool_acc: Dict[int, Dict[str, str]] = {}
         finish_reason = "stop"
         suppress_delta = False
+        last_usage = None
 
         async for chunk in stream:
+            # OpenAI：usage 在最后一个 choices 为空的 chunk 里；须在 continue 之前读
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                last_usage = usage
             if not getattr(chunk, "choices", None):
                 continue
             choice = chunk.choices[0]
@@ -191,6 +234,7 @@ class LLMClient:
         if tool_calls_out and finish_reason == "stop":
             finish_reason = "tool_calls"
 
+        _record_response_usage(last_usage)
         return LLMResponse(
             content="".join(content_parts) or None,
             tool_calls=tool_calls_out,
@@ -314,6 +358,7 @@ class LLMClient:
                     ))
                 logger.debug(f"LLM requested {len(tool_calls)} tool calls")
 
+            _record_response_usage(response)
             return LLMResponse(
                 content=message.content,
                 tool_calls=tool_calls,

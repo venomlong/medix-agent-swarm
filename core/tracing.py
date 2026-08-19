@@ -5,8 +5,7 @@
 SwarmCoordinator.process() 里 start_trace / save_trace / end_trace；
 AgentLoop 用 time.monotonic() 手工记 llm_call 与 skill span。
 
-不引入 OpenTelemetry。LLM usage 由 T2.2 调用 record_llm_usage()；
-本模块只提供累加与定价换算，不改 LLMClient。
+不引入 OpenTelemetry。LLMClient 调用 record_llm_usage() 写入当前 Trace 与 GLOBAL_USAGE。
 """
 from __future__ import annotations
 

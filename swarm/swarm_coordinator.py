@@ -363,7 +363,7 @@ class SwarmCoordinator:
 
     @staticmethod
     def _attach_trace(result: Dict[str, Any]) -> None:
-        """answer_done 需要 trace_id；usage 要等 T2.2 才会有非零 token。"""
+        """answer_done 需要 trace_id；usage 由 LLMClient → record_llm_usage 累加。"""
         trace = get_trace()
         if trace is not None:
             result["trace"] = trace.summary()
