@@ -6,11 +6,13 @@ Agent循环引擎
 """
 import uuid
 import json
+import time
 from typing import Dict, Any, List, Optional
 from loguru import logger
 
 from .state_manager import StateManager, TaskStatus
 from .llm_client import LLMResponse
+from .tracing import add_span
 
 # Harness Engineering: 约束验证和自动修复
 try:
@@ -134,14 +136,27 @@ class AgentLoop:
                     # 调用 LLM（可能返回 tool_calls）
                     # 仅单 Agent（record_memory=True）且 webapi 挂了回调时流式，避免 Swarm Worker 文字交错
                     on_delta = self._final_answer_delta_cb(record_memory)
-                    llm_response: LLMResponse = await agent.llm_client.chat_with_tools(
-                        messages=messages,
-                        tools=tools_openai_format,
-                        tool_choice="none" if force_final_answer else "auto",
-                        temperature=agent.config.get('temperature', 0.7),
-                        stream=on_delta is not None,
-                        on_delta=on_delta,
-                    )
+                    llm_t0 = time.monotonic()
+                    try:
+                        llm_response: LLMResponse = await agent.llm_client.chat_with_tools(
+                            messages=messages,
+                            tools=tools_openai_format,
+                            tool_choice="none" if force_final_answer else "auto",
+                            temperature=agent.config.get('temperature', 0.7),
+                            stream=on_delta is not None,
+                            on_delta=on_delta,
+                        )
+                    finally:
+                        add_span(
+                            "llm_call",
+                            "llm",
+                            llm_t0,
+                            time.monotonic(),
+                            {
+                                "agent": getattr(agent, "agent_id", ""),
+                                "iteration": state.iteration,
+                            },
+                        )
 
                     # 记录中间结果
                     state.add_intermediate_result({
@@ -187,6 +202,7 @@ class AgentLoop:
                             logger.debug(f"Executing: {tool_call.name}({tool_call.arguments}) - 第 {self.tool_call_count} 次调用")
                             self._emit_skill_event(agent, input_data, tool_call.name, started=True)
                             skill_ok = True
+                            skill_t0 = time.monotonic()
 
                             try:
                                 # Harness Engineering: 验证调用
@@ -221,6 +237,16 @@ class AgentLoop:
                                     tool_name=tool_call.name,
                                     result={"success": False, "error": str(tool_error)}
                                 )
+                            add_span(
+                                f"skill:{tool_call.name}",
+                                "skill",
+                                skill_t0,
+                                time.monotonic(),
+                                {
+                                    "agent": getattr(agent, "agent_id", ""),
+                                    "ok": skill_ok,
+                                },
+                            )
 
                             # 添加结果消息
                             messages.append(tool_message)
@@ -313,13 +339,27 @@ class AgentLoop:
 
                     # 调用 LLM（禁用 function calling）
                     on_delta = self._final_answer_delta_cb(record_memory)
-                    final_response = await agent.llm_client.chat_with_tools(
-                        messages=messages,
-                        tools=None,
-                        temperature=0.7,
-                        stream=on_delta is not None,
-                        on_delta=on_delta,
-                    )
+                    llm_t0 = time.monotonic()
+                    try:
+                        final_response = await agent.llm_client.chat_with_tools(
+                            messages=messages,
+                            tools=None,
+                            temperature=0.7,
+                            stream=on_delta is not None,
+                            on_delta=on_delta,
+                        )
+                    finally:
+                        add_span(
+                            "llm_call",
+                            "llm",
+                            llm_t0,
+                            time.monotonic(),
+                            {
+                                "agent": getattr(agent, "agent_id", ""),
+                                "iteration": state.iteration,
+                                "forced": True,
+                            },
+                        )
 
                     result = {
                         'answer': final_response.content or '抱歉，未能完成任务',

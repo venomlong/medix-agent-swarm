@@ -88,6 +88,8 @@ class CoordinatorRunner:
         session_id: str,
         listener: Callable[[Any], None],
         on_delta: Optional[Callable[[str], None]] = None,
+        *,
+        trace_id: Optional[str] = None,
     ):
         if self._loop is None:
             raise RuntimeError("CoordinatorRunner 未启动")
@@ -109,7 +111,7 @@ class CoordinatorRunner:
                 delta_token = set_answer_delta_listener(on_delta)
                 try:
                     return await self.coordinator.process(
-                        question, session_id=session_id
+                        question, session_id=session_id, trace_id=trace_id
                     )
                 finally:
                     reset_answer_delta_listener(delta_token)

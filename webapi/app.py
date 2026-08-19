@@ -152,9 +152,14 @@ async def chat(req: ChatRequest, request: Request):
                 )
 
             started = time.monotonic()
+            trace_id = uuid.uuid4().hex[:12]
             try:
                 fut = runner.submit_process(
-                    req.message, session_id, listener, on_delta
+                    req.message,
+                    session_id,
+                    listener,
+                    on_delta,
+                    trace_id=trace_id,
                 )
             except Exception as exc:
                 code, message = classify_error(exc)

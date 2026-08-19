@@ -61,8 +61,10 @@ knowledge/data/milvus_lite.db/
 memory/agents/*/
 memory/swarm/session_summaries/*/
 memory/swarm/*.jsonl
+memory/swarm/traces/*.jsonl
 !memory/agents/.gitkeep
 !memory/swarm/session_summaries/.gitkeep
+!memory/swarm/traces/.gitkeep
 
 # 测试运行日志
 test_run_report.log

@@ -22,6 +22,7 @@ from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
 from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongTermMemory
 from memory.short_term import get_redis_config
 from core.source_collector import get_sources, start_collect, stop_collect
+from core.tracing import end_trace, get_trace, save_trace, start_trace
 from safety import EmergencyTriage, build_emergency_result
 from validation.guardrail import OutputGuardrail, apply_guardrail_to_result
 
@@ -144,7 +145,8 @@ class SwarmCoordinator:
         self,
         question: str,
         context: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         处理用户问题
@@ -153,6 +155,7 @@ class SwarmCoordinator:
             question: 用户问题
             context: 额外上下文（年龄、既往史等）
             session_id: 会话ID（如果不提供，将自动生成）
+            trace_id: 请求级追踪 ID（webapi 入口生成；缺省则本地生成）
 
         Returns:
             处理结果
@@ -164,14 +167,20 @@ class SwarmCoordinator:
         logger.info(f"Processing question (session={session_id}): {question[:50]}...")
 
         collect_token = start_collect()
+        # 分诊之前就 start，急症短路也能留下一条可对比的 trace
+        trace_token = start_trace(session_id, trace_id=trace_id)
         try:
-            return await self._process_inner(
+            result = await self._process_inner(
                 question=question,
                 context=context,
                 session_id=session_id,
                 start_time=start_time,
             )
+            self._attach_trace(result)
+            return result
         finally:
+            save_trace()
+            end_trace(trace_token)
             stop_collect(collect_token)
 
     async def _process_inner(
@@ -351,6 +360,13 @@ class SwarmCoordinator:
     def _attach_sources(result: Dict[str, Any]) -> None:
         """写入去重后的 RAG 引用来源。护栏只改 answer，不会丢掉本字段。"""
         result["sources"] = get_sources()
+
+    @staticmethod
+    def _attach_trace(result: Dict[str, Any]) -> None:
+        """answer_done 需要 trace_id；usage 要等 T2.2 才会有非零 token。"""
+        trace = get_trace()
+        if trace is not None:
+            result["trace"] = trace.summary()
 
     async def _handle_emergency(
         self,
