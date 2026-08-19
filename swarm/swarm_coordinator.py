@@ -22,6 +22,7 @@ from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
 from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongTermMemory
 from memory.short_term import get_redis_config
 from safety import EmergencyTriage, build_emergency_result
+from validation.guardrail import OutputGuardrail, apply_guardrail_to_result
 
 
 class SwarmCoordinator:
@@ -63,6 +64,8 @@ class SwarmCoordinator:
 
         # 急症分诊器（输入侧 fail-fast）
         self.triage = EmergencyTriage(llm_client=self.llm_client)
+        # 输出侧护栏（规则常开；LLM 只在违规时重写）。急症短路路径不调用。
+        self.guardrail = OutputGuardrail(llm_client=self.llm_client)
 
         # 记忆管理器
         self.session_manager = SessionSummaryManager()
@@ -81,6 +84,51 @@ class SwarmCoordinator:
 
         logger.info(f"SwarmCoordinator initialized with {len(self.worker_pool)} workers")
         logger.info(f"Memory system: short_term={self.short_term_memory.storage_type}, long_term={'enabled' if self.long_term_memory.enabled else 'disabled'}")
+
+    async def _apply_output_guardrail(
+        self,
+        question: str,
+        result: Dict[str, Any],
+        session_id: str,
+        shared_context: Any = None,
+        overwrite_memory: bool = True,
+    ) -> None:
+        """最终答案护栏。失败时放行原文并记一条错误，不让主流程崩溃。"""
+        try:
+            await apply_guardrail_to_result(
+                self.guardrail,
+                question,
+                result,
+                session_id=session_id,
+                shared_context=shared_context,
+            )
+        except Exception as e:
+            logger.error(f"Output guardrail failed, keeping original answer: {e}")
+            try:
+                from validation.safety_log import record as persist_record
+
+                persist_record(
+                    kind="guardrail_error",
+                    detail=str(e)[:200],
+                    session_id=session_id,
+                    source="guardrail",
+                )
+            except Exception:
+                pass
+            return
+
+        if not overwrite_memory:
+            return
+        if not (result.get("guardrail") or {}).get("rewritten"):
+            return
+        # 单 Agent 路径的短期记忆已由 AgentLoop 写入原文，这里覆盖成护栏后的终稿。
+        # Swarm 路径此时还没写入本轮 assistant，绝不能覆盖上一轮。
+        try:
+            self.short_term_memory.update_last_assistant(
+                session_id, result.get("answer") or ""
+            )
+        except Exception as e:
+            logger.warning(f"Failed to overwrite short-term memory after guardrail: {e}")
 
     def _get_agent_by_id(self, agent_id: str):
         """根据 agent_id 返回对应的 Agent 实例"""
@@ -234,6 +282,9 @@ class SwarmCoordinator:
                 'swarm_enabled': False,
                 'session_id': session_id
             })
+
+        await self._apply_output_guardrail(question, result, session_id)
+        final_answer = result.get("answer") or ""
 
         # ===== 统一的记忆保存（非 Swarm 模式）=====
         end_time = datetime.now()
@@ -400,6 +451,17 @@ class SwarmCoordinator:
             timeout_occurred=timeout_occurred
         )
 
+        # Lead 汇总目前没有 AutoFixer；护栏补上这一层。急症路径不会走到这里。
+        swarm_result = {"answer": final_answer}
+        await self._apply_output_guardrail(
+            question,
+            swarm_result,
+            session_id,
+            shared_context=shared_context,
+            overwrite_memory=False,
+        )
+        final_answer = swarm_result.get("answer") or ""
+
         end_time = datetime.now()
 
         # Step 4: 生成 SessionSummary
@@ -477,6 +539,8 @@ class SwarmCoordinator:
             'swarm_metadata': shared_context.get_summary(),
             'timeout_occurred': timeout_occurred
         }
+        if swarm_result.get("guardrail"):
+            result["guardrail"] = swarm_result["guardrail"]
 
         # 提取建议和免责声明（简化实现）
         result['suggestions'] = self._extract_suggestions(final_answer)

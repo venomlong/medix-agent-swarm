@@ -283,6 +283,19 @@ class ShortTermMemory:
 
         logger.debug(f"Added {role} message to session {session_id}")
 
+    def update_last_assistant(self, session_id: str, content: str) -> bool:
+        """覆盖最近一条 assistant 消息（护栏改写后与最终答案对齐）。"""
+        history = self.get_session(session_id)
+        if history is None or not history.messages:
+            return False
+        for msg in reversed(history.messages):
+            if msg.get("role") == "assistant":
+                msg["content"] = content
+                if self.storage_type == "redis" and self.redis_client:
+                    self._save_to_redis(history)
+                return True
+        return False
+
     def get_session(self, session_id: str) -> Optional[ConversationHistory]:
         """
         获取会话历史

@@ -128,6 +128,7 @@ data: <JSON>
 | `session` | `session_id` | 服务层首帧 | 必做 |
 | `routing` | `mode`: `swarm` \| `single` \| `emergency`；`subtask_count`；`reason?` | Coordinator 分解结果；急症由 `EMERGENCY_TRIGGERED` 额外合成 | 必做（前端扩展，events.py 无） |
 | `emergency_triggered` | `is_emergency`, `category`, `matched[]`, `reason`, `method` | `EventType.EMERGENCY_TRIGGERED`（输入侧急症分诊命中） | T3.1：前端红色答案卡 / 急症短路徽标 |
+| `guardrail_triggered` | `violations[]`（type/evidence）、`rewritten`、`action` | `EventType.GUARDRAIL_TRIGGERED`（输出侧护栏命中） | T3.2：答案已改写；`answer_done.guardrail` 同步携带 |
 | `swarm_started` | `question`, `num_subtasks` | `EventType.SWARM_STARTED` | 必做；**单 Agent 由服务层合成** |
 | `task_decomposed` | `subtask_id`, `type`, `assigned_agent`, `description?` | `SharedContext.add_subtask`（每个子任务一帧） | 必做 |
 | `subtask_started` | `subtask_id`, `assigned_agent` | `start_subtask` | 必做 |
@@ -155,10 +156,24 @@ data: <JSON>
   "alert_note": null,
   "sources": [],
   "emergency": false,
+  "guardrail": null,
   "swarm_enabled": true,
   "session_id": "…"
 }
 ```
+
+`guardrail` 在输出护栏命中时为对象，例如：
+
+```json
+{
+  "triggered": true,
+  "violations": [{"type": "certainty_diagnosis", "evidence": "你得的是心肌炎"}],
+  "rewritten": true,
+  "action": "rewrite"
+}
+```
+
+未命中时为 `null` / 省略。急症短路路径不过护栏。
 
 M1 允许：`alert` / `sources` 为空；若答案正文含「重要提醒」「就医」，前端可先从 `body` 启发式拆条（或暂不拆）。结构化拆分标为 M1.5。
 
@@ -188,7 +203,7 @@ HTTP 层：非法 JSON → 400（非 SSE）；处理中异常 → SSE `error` �
 | GET | `/sessions/{id}/similar` | Mem0 `search_similar_sessions` | M2 |
 | GET | `/stats` | 今日/本周会话、Swarm 占比、耗时 | M3 仪表盘 |
 | GET | `/kb/search?q=&type=` | Milvus `search` | M4 知识库 |
-| GET | `/safety/fixes` | AutoFixer 日志（需先有记录） | M4 安全页 |
+| GET | `/safety/fixes` | AutoFixer + 输出护栏 JSONL（重启后仍可读，`scope=persistent`） | M4 安全页 |
 
 ---
 

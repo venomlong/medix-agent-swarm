@@ -28,6 +28,12 @@ def _record_fix(kind: str, detail: str) -> None:
             "detail": detail,
         }
     )
+    try:
+        from .safety_log import record as persist_record
+
+        persist_record(kind=kind, detail=detail, source="auto_fixer")
+    except Exception as exc:
+        logger.warning(f"Failed to persist AutoFixer record: {exc}")
 
 
 class AutoFixer:

@@ -60,6 +60,7 @@ knowledge/data/milvus_lite.db/
 # 运行期生成的会话记录/身份文件（不应提交到仓库）
 memory/agents/*/
 memory/swarm/session_summaries/*/
+memory/swarm/*.jsonl
 !memory/agents/.gitkeep
 !memory/swarm/session_summaries/.gitkeep
 

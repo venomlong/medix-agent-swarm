@@ -230,15 +230,19 @@ async def _run_worker_sync(runner: CoordinatorRunner, fn, *args, **kwargs):
 @app.get("/api/stats")
 async def stats() -> Dict[str, Any]:
     from validation.auto_fixer import get_fix_records
+    from validation.safety_log import get_records as get_safety_records
 
-    records = get_fix_records()
+    records = get_safety_records(limit=200) or get_fix_records()
     disclaimer = sum(1 for r in records if r.get("kind") == "免责声明")
     emergency = sum(1 for r in records if r.get("kind") == "就医提醒")
+    # 会话计数仍是进程内；安全修复次数改读 JSONL。不把整个 stats.scope
+    # 改成 persistent，以免仪表盘把 chat_count 误读成跨重启累计。
     return STATS.snapshot(
         extra={
             "auto_fix": len(records),
             "disclaimer_fix": disclaimer,
             "emergency_fix": emergency,
+            "auto_fix_scope": "persistent",
         }
     )
 
@@ -414,15 +418,19 @@ async def kb_chunk_detail(chunk_id: str, request: Request) -> Dict[str, Any]:
 @app.get("/api/safety/fixes")
 def safety_fixes() -> Dict[str, Any]:
     from validation.auto_fixer import get_fix_records
+    from validation.safety_log import get_records as get_safety_records
 
-    records = get_fix_records()
+    records = get_safety_records(limit=200)
+    if not records:
+        records = get_fix_records()
     return {
         "records": records,
         "count": len(records),
-        "scope": "current_process",
-        "label": "本次服务启动后的 AutoFixer 记录（无持久历史库）",
+        "scope": "persistent",
+        "label": "持久化安全记录（JSONL，含 AutoFixer 与输出护栏；重启后仍可查询）",
         "assertions": [
             "输出须含免责声明（「免责」或「仅供参考」）",
             "检出胸痛、呼吸困难、昏厥等高危关键词时须附加就医提醒",
+            "确定性诊断断言、具体用药剂量、替代就医等由输出护栏检出并改写",
         ],
     }
