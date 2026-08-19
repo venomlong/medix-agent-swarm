@@ -30,7 +30,7 @@ from core.log_privacy import mask_pii
 # 元/百万 token；可被 LLM_CONFIG["pricing"] = {"input": x, "output": y} 覆盖
 PRICING_DEFAULT: Dict[str, float] = {"input": 2.0, "output": 8.0}
 
-# 跨线程读简单数字即可；/api/stats（T2.4）再挂出去
+# 跨线程读简单数字即可；/api/stats 从这里挂出去
 GLOBAL_USAGE: Dict[str, Any] = {
     "prompt_tokens": 0,
     "completion_tokens": 0,
@@ -326,3 +326,42 @@ def save_trace(trace: Optional[Trace] = None) -> None:
                 fh.write(line + "\n")
     except Exception as exc:
         logger.warning(f"Failed to persist trace: {exc}")
+
+
+def load_traces(session_id: str) -> List[Dict[str, Any]]:
+    """读该 session 的 JSONL。文件不存在 / 空 session → 空列表。坏行跳过。"""
+    sid = (session_id or "").strip()
+    if not sid:
+        return []
+    path = trace_path(sid)
+    try:
+        if not path.is_file():
+            return []
+        with _WRITE_LOCK:
+            text = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        logger.warning(f"Failed to read traces for {sid}: {exc}")
+        return []
+
+    traces: List[Dict[str, Any]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            logger.warning(f"Skip malformed trace line in {path.name}")
+            continue
+        if isinstance(obj, dict):
+            traces.append(obj)
+    return traces
+
+
+def global_usage_snapshot() -> Dict[str, Any]:
+    """给 /api/stats extra 用。进程内累计，重启归零。"""
+    return {
+        "total_tokens": int(GLOBAL_USAGE.get("total_tokens") or 0),
+        "total_cost": round(float(GLOBAL_USAGE.get("cost") or 0.0), 6),
+        "llm_calls": int(GLOBAL_USAGE.get("llm_calls") or 0),
+    }

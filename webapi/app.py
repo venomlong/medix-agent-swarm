@@ -21,7 +21,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from core.log_privacy import install_log_privacy
-from core.tracing import TRACE_LOG_FORMAT
+from core.tracing import TRACE_LOG_FORMAT, global_usage_snapshot, load_traces
 
 from .bridge import (
     CoordinatorRunner,
@@ -251,14 +251,28 @@ async def stats() -> Dict[str, Any]:
     emergency = sum(1 for r in records if r.get("kind") == "就医提醒")
     # 会话计数仍是进程内；安全修复次数改读 JSONL。不把整个 stats.scope
     # 改成 persistent，以免仪表盘把 chat_count 误读成跨重启累计。
+    usage = global_usage_snapshot()
     return STATS.snapshot(
         extra={
             "auto_fix": len(records),
             "disclaimer_fix": disclaimer,
             "emergency_fix": emergency,
             "auto_fix_scope": "persistent",
+            "total_tokens": usage["total_tokens"],
+            "total_cost": usage["total_cost"],
+            "llm_calls": usage["llm_calls"],
         }
     )
+
+
+@app.get("/api/traces/{session_id}")
+async def session_traces(session_id: str) -> Dict[str, Any]:
+    """读 traces JSONL；文件不存在返回空列表（不 404）。落盘已脱敏，原样读出。"""
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"session_id": "", "traces": [], "count": 0}
+    items = await asyncio.to_thread(load_traces, sid)
+    return {"session_id": sid, "traces": items, "count": len(items)}
 
 
 @app.get("/api/sessions")

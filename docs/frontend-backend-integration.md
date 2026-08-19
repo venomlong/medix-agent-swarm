@@ -221,9 +221,60 @@ HTTP 层：非法 JSON → 400（非 SSE）；处理中异常 → SSE `error` �
 | GET | `/sessions` | 会话列表（SessionSummary 文件） | M2 记忆页 |
 | GET | `/sessions/{id}` | 单会话 + 事件回放 | M2 |
 | GET | `/sessions/{id}/similar` | Mem0 `search_similar_sessions` | M2 |
-| GET | `/stats` | 今日/本周会话、Swarm 占比、耗时 | M3 仪表盘 |
+| GET | `/stats` | 会话计数、Swarm 占比、耗时；`total_tokens` / `total_cost` / `llm_calls`（进程内 GLOBAL_USAGE，重启归零） | M3 仪表盘 + T2.4 |
+| GET | `/traces/{session_id}` | 该会话历次 Trace（含 spans）；文件不存在返回空列表 | T2.4 |
 | GET | `/kb/search?q=&type=` | Milvus `search` | M4 知识库 |
 | GET | `/safety/fixes` | AutoFixer + 输出护栏 JSONL（重启后仍可读，`scope=persistent`） | M4 安全页 |
+
+### 4.4 可观测性查询（T2.4）
+
+路径带 `/api` 前缀（与现网一致）。**不改前端 Dashboard**（T2.5）。
+
+**`GET /api/traces/{session_id}`**
+
+读 `memory/swarm/traces/{session_id}.jsonl`（一行一个 `Trace.to_dict()`）。读文件在 `asyncio.to_thread` 中做。文件不存在或 session 为空 → **空列表，HTTP 200**（不 404）。落盘时已做 PII 脱敏，查询接口原样返回，不再二次解码。
+
+```json
+{
+  "session_id": "20260819-140000-abcd1234",
+  "count": 2,
+  "traces": [
+    {
+      "trace_id": "cafe1234beef",
+      "session_id": "20260819-140000-abcd1234",
+      "started_at": "2026-08-19T14:00:00.123",
+      "ended_at": "2026-08-19T14:00:03.456",
+      "prompt_tokens": 800,
+      "completion_tokens": 200,
+      "total_tokens": 1000,
+      "llm_calls": 2,
+      "cost": 0.0032,
+      "elapsed": 3.21,
+      "span_count": 3,
+      "spans": [
+        {
+          "name": "triage",
+          "kind": "phase",
+          "start": 1.0,
+          "end": 1.05,
+          "duration_ms": 50.0,
+          "meta": {}
+        }
+      ]
+    }
+  ]
+}
+```
+
+`traces` 按 JSONL 追加顺序（时间正序）。每条含完整 `spans`（名称、类型、起止、耗时、meta）。
+
+**`GET /api/stats` 新增 extra 字段**（进程内累计，来自 `core.tracing.GLOBAL_USAGE`；重启归零。会话 traces 文件仍在盘上）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `total_tokens` | int | 本进程累计 prompt+completion |
+| `total_cost` | float | 累计成本（人民币元） |
+| `llm_calls` | int | 累计 LLM 调用次数 |
 
 ---
 
