@@ -37,7 +37,7 @@ function timeLabel(): string {
 }
 
 const EXAMPLE_PROMPTS = [
-  { title: "急症短路", text: "胸口压榨性疼痛还出冷汗" },
+  { title: "急症短路", text: "突然呕血了怎么办" },
   { title: "知识库引用", text: "高血压饮食注意什么" },
   { title: "普通咨询", text: DEFAULT_QUESTION },
 ] as const;

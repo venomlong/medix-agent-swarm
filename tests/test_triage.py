@@ -34,6 +34,13 @@ class EmergencyTriageRuleTests(unittest.TestCase):
                 self.assertFalse(result.is_emergency)
                 self.assertEqual(self.triage.is_borderline(question), [])
 
+    def test_hematemesis_colloquial_is_emergency(self):
+        for question in ("呕血症状", "突然呕血了怎么办", "吐血", "吐了血好多", "咯血"):
+            with self.subTest(question=question):
+                result = self.triage.check_rules(question)
+                self.assertTrue(result.is_emergency, question)
+                self.assertEqual(result.category, "bleeding")
+
     def test_psych_crisis(self):
         result = self.triage.check_rules("活不下去了")
         self.assertTrue(result.is_emergency)

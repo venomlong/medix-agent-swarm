@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional, List
 from loguru import logger
 
 from core import LLMClient
-from .shared_context import SharedContext, emit_live_event
+from .shared_context import SharedContext, emit_live_event, get_answer_delta_listener
 from .lead_agent import LeadAgent
 from .events import Event, EventType
 from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
@@ -432,12 +432,52 @@ class SwarmCoordinator:
         end_time = datetime.now()
         result["total_time"] = (end_time - start_time).total_seconds()
 
+        # 立刻把急救正文推进 SSE，避免前端干等到 answer_done 再打字机逐字播
+        on_delta = get_answer_delta_listener()
+        if on_delta and result.get("answer"):
+            try:
+                on_delta(result["answer"])
+            except Exception as e:
+                logger.debug(f"Emergency answer_delta emit failed: {e}")
+
+        # Redis / 写盘不得堵住 120 场景；超时后后台线程仍会继续写
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._persist_emergency_memory,
+                    question,
+                    result.get("answer") or "",
+                    session_id,
+                    start_time,
+                    end_time,
+                ),
+                timeout=0.4,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Emergency memory persist exceeded 0.4s, returning anyway")
+        except Exception as e:
+            logger.error(f"Failed to persist emergency conversation: {e}")
+
+        logger.warning(
+            f"🚨 Emergency fail-fast completed in {result['total_time']:.2f}s "
+            f"(category={triage_result.category}, session={session_id})"
+        )
+        return result
+
+    def _persist_emergency_memory(
+        self,
+        question: str,
+        answer: str,
+        session_id: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
         try:
             self.short_term_memory.add_message(
                 session_id=session_id, role="user", content=question
             )
             self.short_term_memory.add_message(
-                session_id=session_id, role="assistant", content=result["answer"]
+                session_id=session_id, role="assistant", content=answer
             )
         except Exception as e:
             logger.error(f"Failed to save emergency conversation to short-term memory: {e}")
@@ -446,7 +486,7 @@ class SwarmCoordinator:
             summary = SessionSummary.from_single_agent(
                 session_id=session_id,
                 question=question,
-                final_answer=result["answer"],
+                final_answer=answer,
                 agent_id="emergency_triage",
                 start_time=start_time,
                 end_time=end_time,
@@ -455,12 +495,6 @@ class SwarmCoordinator:
             self.session_manager.save_summary(summary)
         except Exception as e:
             logger.error(f"Failed to generate emergency session summary: {e}")
-
-        logger.warning(
-            f"🚨 Emergency fail-fast completed in {result['total_time']:.2f}s "
-            f"(category={triage_result.category}, session={session_id})"
-        )
-        return result
 
     async def _process_with_swarm(
         self,

@@ -106,7 +106,16 @@ class CoordinatorRunner:
 
             assert self._lock is not None
             assert self.coordinator is not None
-            async with self._lock:
+
+            rule_hit = False
+            try:
+                rule_hit = bool(
+                    self.coordinator.triage.check_rules(question).is_emergency
+                )
+            except Exception:
+                rule_hit = False
+
+            async def _run():
                 token = set_event_listener(listener)
                 delta_token = set_answer_delta_listener(on_delta)
                 try:
@@ -116,6 +125,12 @@ class CoordinatorRunner:
                 finally:
                     reset_answer_delta_listener(delta_token)
                     reset_event_listener(token)
+
+            # 规则急症不排队：正在跑的 Swarm 不能把 120 场景堵住
+            if rule_hit:
+                return await _run()
+            async with self._lock:
+                return await _run()
 
         return asyncio.run_coroutine_threadsafe(_job(), self._loop)
 

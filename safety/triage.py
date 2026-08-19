@@ -43,6 +43,19 @@ class TriageResult:
 
 # ---------- 规则定义 ----------
 
+def _normalize_question(text: str) -> str:
+    """去掉空白/标点，并把「吐了血」收成「吐血」，避免口语漏匹配。"""
+    t = (text or "").strip()
+    t = re.sub(r"[\s\u3000，,。.!！？?、；;：:]+", "", t)
+    t = (
+        t.replace("吐了血", "吐血")
+        .replace("呕了血", "呕血")
+        .replace("咳了血", "咳血")
+        .replace("咯了血", "咯血")
+    )
+    return t
+
+
 # 强规则：出现即判定急症（category, 关键词列表）
 STRONG_RULES: List[Dict[str, Any]] = [
     {
@@ -51,7 +64,10 @@ STRONG_RULES: List[Dict[str, Any]] = [
     },
     {
         "category": "bleeding",
-        "keywords": ["大出血", "出血不止", "呕血", "咳血不止", "血流不止"],
+        "keywords": [
+            "大出血", "出血不止", "呕血", "吐血", "咯血", "咳血", "喷血",
+            "咳血不止", "血流不止", "消化道出血",
+        ],
     },
     {
         "category": "poisoning",
@@ -123,7 +139,7 @@ class EmergencyTriage:
 
     def check_rules(self, question: str) -> TriageResult:
         """规则层：强规则 + 组合规则，确定性、毫秒级"""
-        text = (question or "").strip()
+        text = _normalize_question(question)
         if not text:
             return TriageResult(is_emergency=False, method="none")
 
@@ -159,7 +175,7 @@ class EmergencyTriage:
 
     def is_borderline(self, question: str) -> List[str]:
         """是否命中边缘关键词（需要 LLM 进一步判定）"""
-        text = (question or "").strip()
+        text = _normalize_question(question)
         return [kw for kw in BORDERLINE_KEYWORDS if kw in text]
 
     async def triage(self, question: str) -> TriageResult:

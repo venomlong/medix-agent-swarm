@@ -302,6 +302,17 @@ function typewrite(full: string, onDelta: (text: string) => void, signal: AbortS
 }
 
 async function finishAnswer(h: ChatHandlers, payload: AnswerPayload, signal: AbortSignal) {
+  // 急症必须立刻整段出现，不能再走打字机
+  if (payload.emergency) {
+    h.onAnswerStart(payload);
+    h.onAnswerDelta(payload.body);
+    if (payload.alert) h.onReveal("alert");
+    h.onReveal("suggestions");
+    h.onReveal("sources");
+    h.onReveal("disclaimer");
+    h.onAnswerDone(payload);
+    return;
+  }
   h.onAnswerStart({ ...payload, body: "" });
   await typewrite(payload.body, h.onAnswerDelta, signal);
   if (signal.aborted) return;
