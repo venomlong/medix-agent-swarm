@@ -262,6 +262,15 @@ input, textarea { font-family: inherit; color: inherit; }
   font-size: 13px;
   font-weight: 600;
 }
+.alert-bar.critical {
+  background: #B85C4A1A;
+  border-left-width: 4px;
+  border-left-color: var(--rust);
+  color: var(--rust);
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 10px 14px;
+}
 
 .search-input,
 .composer textarea {
@@ -496,6 +505,10 @@ input, textarea { font-family: inherit; color: inherit; }
   gap: 10px;
   box-shadow: var(--shadow);
 }
+.answer.emergency {
+  border-color: #B85C4A55;
+  box-shadow: 0 2px 14px rgba(184, 92, 74, 0.12);
+}
 .answer-head { display: flex; align-items: center; gap: 6px; }
 .answer-body { font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; }
 .answer-body .caret {
@@ -514,6 +527,10 @@ input, textarea { font-family: inherit; color: inherit; }
 .routing-pill { align-self: flex-start; }
 .routing-pill.pending {
   animation: pulse 2s ease-out infinite;
+}
+.routing-pill.emergency {
+  background: #B85C4A1A;
+  color: var(--rust);
 }
 
 .wb-composer-wrap {

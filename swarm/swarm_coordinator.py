@@ -15,12 +15,13 @@ from typing import Dict, Any, Optional, List
 from loguru import logger
 
 from core import LLMClient
-from .shared_context import SharedContext
+from .shared_context import SharedContext, emit_live_event
 from .lead_agent import LeadAgent
 from .events import Event, EventType
 from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
 from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongTermMemory
 from memory.short_term import get_redis_config
+from safety import EmergencyTriage, build_emergency_result
 
 
 class SwarmCoordinator:
@@ -59,6 +60,9 @@ class SwarmCoordinator:
             self.diagnostic_agent,
             self.research_agent
         ]
+
+        # 急症分诊器（输入侧 fail-fast）
+        self.triage = EmergencyTriage(llm_client=self.llm_client)
 
         # 记忆管理器
         self.session_manager = SessionSummaryManager()
@@ -109,6 +113,17 @@ class SwarmCoordinator:
             session_id = f"{start_time.strftime('%Y%m%d-%H%M%S')}-{str(uuid.uuid4())[:8]}"
 
         logger.info(f"Processing question (session={session_id}): {question[:50]}...")
+
+        # ===== Step 0: 急症分诊（fail-fast）=====
+        # 命中急症时跳过记忆检索、任务分解和 Swarm，秒级返回结构化急救指引
+        triage_result = await self.triage.triage(question)
+        if triage_result.is_emergency:
+            return await self._handle_emergency(
+                question=question,
+                triage_result=triage_result,
+                session_id=session_id,
+                start_time=start_time,
+            )
 
         # ===== 统一的记忆检索（所有模式都使用）=====
         # 1. 检索长期记忆（相似历史会话）
@@ -256,6 +271,59 @@ class SwarmCoordinator:
         except Exception as e:
             logger.error(f"Failed to save to long-term memory: {e}")
 
+        return result
+
+    async def _handle_emergency(
+        self,
+        question: str,
+        triage_result,
+        session_id: str,
+        start_time: datetime,
+    ) -> Dict[str, Any]:
+        """
+        急症短路路径：发布事件 → 生成急救指引 → 写短期记忆和会话总结。
+
+        刻意不写 Mem0 长期记忆（急症指引是模板化应急输出，
+        不是有复用价值的"相似案例"，且要保证秒级返回）。
+        """
+        emit_live_event(Event(
+            type=EventType.EMERGENCY_TRIGGERED,
+            source_agent="emergency_triage",
+            data=triage_result.to_dict(),
+        ))
+
+        result = build_emergency_result(question, triage_result, session_id)
+        end_time = datetime.now()
+        result["total_time"] = (end_time - start_time).total_seconds()
+
+        try:
+            self.short_term_memory.add_message(
+                session_id=session_id, role="user", content=question
+            )
+            self.short_term_memory.add_message(
+                session_id=session_id, role="assistant", content=result["answer"]
+            )
+        except Exception as e:
+            logger.error(f"Failed to save emergency conversation to short-term memory: {e}")
+
+        try:
+            summary = SessionSummary.from_single_agent(
+                session_id=session_id,
+                question=question,
+                final_answer=result["answer"],
+                agent_id="emergency_triage",
+                start_time=start_time,
+                end_time=end_time,
+                mode="emergency",
+            )
+            self.session_manager.save_summary(summary)
+        except Exception as e:
+            logger.error(f"Failed to generate emergency session summary: {e}")
+
+        logger.warning(
+            f"🚨 Emergency fail-fast completed in {result['total_time']:.2f}s "
+            f"(category={triage_result.category}, session={session_id})"
+        )
         return result
 
     async def _process_with_swarm(

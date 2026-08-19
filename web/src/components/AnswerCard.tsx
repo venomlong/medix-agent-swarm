@@ -16,12 +16,13 @@ const DEFAULT_REVEAL: AnswerReveal = {
 
 export function AnswerCard({ answer, streaming, reveal }: Props) {
   const r = reveal ?? DEFAULT_REVEAL;
+  const emergency = Boolean(answer.emergency);
   return (
-    <article className="answer">
+    <article className={`answer${emergency ? " emergency" : ""}`}>
       <div className="answer-head">
-        <AgentAvatarGroup count={answer.agentCount} />
+        <AgentAvatarGroup count={emergency ? 1 : answer.agentCount} />
         <span className="muted" style={{ fontSize: 12 }}>
-          {answer.agentCount} 个专业 Agent 协作回答
+          {emergency ? "急症分诊 · 已短路常规协作流程" : `${answer.agentCount} 个专业 Agent 协作回答`}
         </span>
         <span style={{ flex: 1 }} />
         <span className="mono muted" style={{ fontSize: 12 }}>
@@ -30,7 +31,7 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
       </div>
 
       {r.alert && answer.alert ? (
-        <div className="alert-bar">
+        <div className={`alert-bar${emergency ? " critical" : ""}`}>
           {answer.alert}
           {answer.alertNote ? (
             <div style={{ fontWeight: 400, fontSize: 11, marginTop: 2 }}>{answer.alertNote}</div>
@@ -45,7 +46,7 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
 
       {r.suggestions && answer.suggestions.length > 0 ? (
         <div>
-          <strong style={{ fontSize: 13.5 }}>【核心建议】</strong>
+          <strong style={{ fontSize: 13.5 }}>{emergency ? "【急救建议】" : "【核心建议】"}</strong>
           {answer.suggestions.map((s, i) => (
             <p key={s} style={{ fontSize: 13, marginTop: i === 0 ? 4 : 0 }}>
               {i + 1}. {s}

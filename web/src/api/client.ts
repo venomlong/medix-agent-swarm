@@ -107,7 +107,16 @@ function eventLabel(name: string, data: Record<string, unknown>): string {
     if (skill) bits.push(skill);
     return bits.join(" · ");
   }
+  if (name === "emergency_triggered") {
+    const cat = String(data.category ?? "");
+    return cat ? `emergency_triggered · ${cat}` : "emergency_triggered";
+  }
   return name;
+}
+
+function parseRoutingMode(mode: unknown): Exclude<RoutingMode, "idle" | "pending"> {
+  if (mode === "single" || mode === "emergency") return mode;
+  return "swarm";
 }
 
 function extractAlert(body: string): Pick<AnswerPayload, "alert" | "alertNote"> {
@@ -138,6 +147,7 @@ function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
     timedOut: Boolean(data.timed_out ?? data.timedOut),
     alert: (data.alert as string | undefined) ?? heuristic.alert,
     alertNote: (data.alert_note as string | undefined) ?? heuristic.alertNote,
+    emergency: Boolean(data.emergency),
   };
 }
 
@@ -283,7 +293,7 @@ export function sendChat(message: string, sessionId: string, h: ChatHandlers): (
         }
 
         if (event === "routing") {
-          const mode = data.mode === "single" ? "single" : "swarm";
+          const mode = parseRoutingMode(data.mode);
           const count = Number(data.subtask_count ?? 0);
           h.onRouting(mode, count);
           if (steps.length === 0) {

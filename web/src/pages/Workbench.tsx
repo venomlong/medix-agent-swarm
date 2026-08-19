@@ -180,7 +180,7 @@ export function Workbench() {
     const handlers = {
       onRouting: (mode: Exclude<RoutingMode, "idle">, subtaskCount?: number) => {
         setRouting(mode);
-        if (mode === "swarm" || mode === "single") {
+        if (mode === "swarm" || mode === "single" || mode === "emergency") {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
@@ -439,6 +439,12 @@ export function Workbench() {
                     <div className="pill routing-pill">
                       <LeafLogo size={11} fill="#5F7F68" />
                       智能路由 · 单 Agent 快速应答
+                    </div>
+                  ) : null}
+                  {m.routing === "emergency" ? (
+                    <div className="pill routing-pill emergency">
+                      <LeafLogo size={11} fill="#B85C4A" />
+                      急症短路 · 已跳过常规 Swarm
                     </div>
                   ) : null}
                 </>

@@ -20,6 +20,8 @@ class EventType(Enum):
     SWARM_COMPLETED = "swarm_completed"          # Swarm 完成处理
     SKILL_STARTED = "skill_started"              # Agent 开始调用 Skill
     SKILL_COMPLETED = "skill_completed"          # Agent 完成一次 Skill 调用
+    EMERGENCY_TRIGGERED = "emergency_triggered"  # 急症分诊命中，短路常规流程
+    GUARDRAIL_TRIGGERED = "guardrail_triggered"  # 输出护栏发现违规并处置
 
 
 @dataclass

@@ -126,7 +126,8 @@ data: <JSON>
 | event | data 关键字段 | 来源 | M1 |
 |-------|---------------|------|----|
 | `session` | `session_id` | 服务层首帧 | 必做 |
-| `routing` | `mode`: `swarm` \| `single`；`subtask_count`；`reason?` | Coordinator 分解结果 | 必做（前端扩展，events.py 无） |
+| `routing` | `mode`: `swarm` \| `single` \| `emergency`；`subtask_count`；`reason?` | Coordinator 分解结果；急症由 `EMERGENCY_TRIGGERED` 额外合成 | 必做（前端扩展，events.py 无） |
+| `emergency_triggered` | `is_emergency`, `category`, `matched[]`, `reason`, `method` | `EventType.EMERGENCY_TRIGGERED`（输入侧急症分诊命中） | T3.1：前端红色答案卡 / 急症短路徽标 |
 | `swarm_started` | `question`, `num_subtasks` | `EventType.SWARM_STARTED` | 必做；**单 Agent 由服务层合成** |
 | `task_decomposed` | `subtask_id`, `type`, `assigned_agent`, `description?` | `SharedContext.add_subtask`（每个子任务一帧） | 必做 |
 | `subtask_started` | `subtask_id`, `assigned_agent` | `start_subtask` | 必做 |
@@ -153,6 +154,7 @@ data: <JSON>
   "alert": null,
   "alert_note": null,
   "sources": [],
+  "emergency": false,
   "swarm_enabled": true,
   "session_id": "…"
 }

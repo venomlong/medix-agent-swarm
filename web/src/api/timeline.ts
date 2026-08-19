@@ -82,6 +82,19 @@ export function initialSteps(
   mode: Exclude<RoutingMode, "idle" | "pending">,
   subtaskCount?: number
 ): TimelineStep[] {
+  if (mode === "emergency") {
+    return [
+      {
+        id: "triage",
+        title: "急症分诊",
+        agentLabel: "EmergencyTriage",
+        status: "done",
+        desc: "命中急症规则，已短路常规 Swarm 流程",
+        skills: [],
+      },
+    ];
+  }
+
   if (mode === "single") {
     return [
       {
@@ -167,6 +180,16 @@ export function applyTimelineEvent(
 ): TimelineStep[] {
   const assigned = String(data.assigned_agent ?? data.agent ?? data.source_agent ?? "");
 
+  if (eventName === "emergency_triggered") {
+    if (steps.length === 0 || steps.every((s) => s.id !== "triage")) {
+      return initialSteps("emergency");
+    }
+    return patchById(steps, "triage", {
+      status: "done",
+      desc: String(data.reason || "命中急症规则，已短路常规 Swarm 流程"),
+    });
+  }
+
   if (eventName === "swarm_started") {
     const count = Number(data.num_subtasks ?? 0);
     if (steps.length === 0) {
@@ -247,6 +270,14 @@ export function applyTimelineEvent(
   if (eventName === "swarm_completed" || eventName === "answer_done") {
     const duration = formatDuration(data.duration as number | undefined) ?? (typeof data.elapsed === "string" ? data.elapsed : undefined);
     let next = steps;
+    if (next.some((s) => s.id === "triage") || Boolean(data.emergency)) {
+      if (next.length === 0) next = initialSteps("emergency");
+      return patchById(next, "triage", {
+        status: "done",
+        duration,
+        desc: "命中急症规则，已返回急救指引",
+      });
+    }
     if (next.length === 0) {
       const swarm = Boolean(data.swarm_enabled) || Number(data.agent_count ?? data.agents_count ?? 0) > 1;
       next = initialSteps(swarm ? "swarm" : "single", Number(data.agent_count ?? data.num_subtasks) || 1);

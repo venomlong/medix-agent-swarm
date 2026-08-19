@@ -177,6 +177,7 @@ def map_answer_done(
     if total is None:
         total = elapsed_s
 
+    trace = result.get("trace") or {}
     return with_common(
         {
             "body": result.get("answer") or "",
@@ -185,9 +186,19 @@ def map_answer_done(
             "elapsed": f"{float(total):.1f}s",
             "agent_count": agent_count,
             "timed_out": bool(result.get("timeout_occurred")),
-            "alert": None,
+            "alert": result.get("alert"),
             "alert_note": None,
-            "sources": [],
+            "sources": result.get("sources") or [],
+            "emergency": bool(result.get("emergency")),
+            "guardrail": result.get("guardrail"),
+            "usage": {
+                "total_tokens": trace.get("total_tokens", 0),
+                "prompt_tokens": trace.get("prompt_tokens", 0),
+                "completion_tokens": trace.get("completion_tokens", 0),
+                "llm_calls": trace.get("llm_calls", 0),
+                "cost": trace.get("cost", 0.0),
+            },
+            "trace_id": trace.get("trace_id"),
             "swarm_enabled": swarm_enabled,
             "session_id": session_id,
         },
@@ -323,6 +334,18 @@ def attach_live_listener(
                         "mode": "swarm",
                         "subtask_count": event.data.get("num_subtasks", 0),
                     },
+                    session_id,
+                    event.timestamp.isoformat(),
+                ),
+            )
+        if event.type == EventType.EMERGENCY_TRIGGERED:
+            # 急症短路没有 SWARM_STARTED，必须置 live，
+            # 否则 process 结束后会再合成一套假的单 Agent 时间线
+            flags["live"] = True
+            emit(
+                "routing",
+                with_common(
+                    {"mode": "emergency", "subtask_count": 0},
                     session_id,
                     event.timestamp.isoformat(),
                 ),
