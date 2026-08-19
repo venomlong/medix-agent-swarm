@@ -7,6 +7,7 @@ FastAPI 入口：CORS + lifespan 单例 + POST /api/chat SSE + GET /api/health�
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -20,6 +21,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from core.log_privacy import install_log_privacy
+from core.tracing import TRACE_LOG_FORMAT
 
 from .bridge import (
     CoordinatorRunner,
@@ -43,6 +45,8 @@ from .sse import format_sse, with_common
 
 # uvicorn 加载本模块即挂上全局日志脱敏，覆盖 Coordinator / Agent Loop 的 question 日志
 install_log_privacy()
+logger.remove()
+logger.add(sys.stderr, format=TRACE_LOG_FORMAT, level="INFO")
 
 SENTINEL: Tuple[Optional[str], Optional[Dict[str, Any]]] = (None, None)
 

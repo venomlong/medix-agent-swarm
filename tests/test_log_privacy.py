@@ -96,12 +96,14 @@ class PatchRecordUnitTests(unittest.TestCase):
     def test_patch_mutates_message_and_extra(self):
         record = {
             "message": "call 13900001111",
-            "extra": {"mail": "z@z.cn", "n": 3},
+            "extra": {"mail": "z@z.cn", "n": 3, "trace": "deadbeefcafe"},
         }
         patch_log_record(record)
         self.assertEqual(record["message"], "call 1**********")
         self.assertEqual(record["extra"]["mail"], "z***@***")
         self.assertEqual(record["extra"]["n"], 3)
+        # trace_id 保持原样，避免 12 位 hex 被当成 PII
+        self.assertEqual(record["extra"]["trace"], "deadbeefcafe")
 
 
 if __name__ == "__main__":

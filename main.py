@@ -14,23 +14,24 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from core.log_privacy import install_log_privacy
+from core.tracing import TRACE_LOG_FORMAT, TRACE_LOG_FORMAT_COMPACT
 from swarm import process_with_swarm
 
 
 def setup_logger(verbose: bool = False):
-    """配置日志，并挂上全局 PII 脱敏 patcher。"""
+    """配置日志：PII 脱敏 patcher + 每行 extra.trace。"""
     install_log_privacy()
     logger.remove()
     if verbose:
         logger.add(
             sys.stderr,
-            format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+            format=TRACE_LOG_FORMAT,
             level="DEBUG"
         )
     else:
         logger.add(
             sys.stderr,
-            format="<level>{level: <8}</level> | <level>{message}</level>",
+            format=TRACE_LOG_FORMAT_COMPACT,
             level="INFO"
         )
 

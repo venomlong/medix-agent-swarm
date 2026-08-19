@@ -6,6 +6,7 @@ SwarmCoordinator.process() 里 start_trace / save_trace / end_trace；
 AgentLoop 用 time.monotonic() 手工记 llm_call 与 skill span。
 
 不引入 OpenTelemetry。LLMClient 调用 record_llm_usage() 写入当前 Trace 与 GLOBAL_USAGE。
+日志通过 patcher 读 get_trace() 写入 extra['trace']（见 logger_ctx / patch_log_trace）。
 """
 from __future__ import annotations
 
@@ -282,6 +283,32 @@ def _mask_trace_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         spans.append(item)
     out["spans"] = spans
     return out
+
+
+def logger_ctx() -> Dict[str, str]:
+    """当前请求的 loguru extra。无 Trace 时用 '-'，保证 `{extra[trace]}` 不缺键。"""
+    trace = get_trace()
+    if trace is None:
+        return {"trace": "-"}
+    return {"trace": trace.trace_id}
+
+
+def patch_log_trace(record: Dict[str, Any]) -> None:
+    """loguru patcher：把当前 trace_id 写入 extra['trace']。须先 configure extra={'trace': '-'}。"""
+    extra = record.get("extra")
+    if not isinstance(extra, dict):
+        return
+    extra["trace"] = logger_ctx()["trace"]
+
+
+# 在 main.py / webapi/app.py 的 logger.add 里使用，保证每行都能按请求过滤
+TRACE_LOG_FORMAT = (
+    "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+    "<cyan>{extra[trace]}</cyan> | <level>{message}</level>"
+)
+TRACE_LOG_FORMAT_COMPACT = (
+    "<level>{level: <8}</level> | <cyan>{extra[trace]}</cyan> | <level>{message}</level>"
+)
 
 
 def save_trace(trace: Optional[Trace] = None) -> None:

@@ -9,6 +9,7 @@ SwarmCoordinator：Swarm 入口和智能路由
 类比：交通信号灯，决定车辆走哪条路，但不控制车辆如何行驶
 """
 import asyncio
+import time
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
@@ -22,7 +23,7 @@ from agents import ConsultationAgent, DiagnosticAgent, ResearchAgent
 from memory import SessionSummaryManager, SessionSummary, ShortTermMemory, LongTermMemory
 from memory.short_term import get_redis_config
 from core.source_collector import get_sources, start_collect, stop_collect
-from core.tracing import end_trace, get_trace, save_trace, start_trace
+from core.tracing import add_span, end_trace, get_trace, save_trace, start_trace
 from safety import EmergencyTriage, build_emergency_result
 from validation.guardrail import OutputGuardrail, apply_guardrail_to_result
 
@@ -96,41 +97,53 @@ class SwarmCoordinator:
         overwrite_memory: bool = True,
     ) -> None:
         """最终答案护栏。失败时放行原文并记一条错误，不让主流程崩溃。"""
+        guardrail_t0 = time.monotonic()
         try:
-            await apply_guardrail_to_result(
-                self.guardrail,
-                question,
-                result,
-                session_id=session_id,
-                shared_context=shared_context,
-            )
-        except Exception as e:
-            logger.error(f"Output guardrail failed, keeping original answer: {e}")
             try:
-                from validation.safety_log import record as persist_record
-
-                persist_record(
-                    kind="guardrail_error",
-                    detail=str(e)[:200],
+                await apply_guardrail_to_result(
+                    self.guardrail,
+                    question,
+                    result,
                     session_id=session_id,
-                    source="guardrail",
+                    shared_context=shared_context,
                 )
-            except Exception:
-                pass
-            return
+            except Exception as e:
+                logger.error(f"Output guardrail failed, keeping original answer: {e}")
+                try:
+                    from validation.safety_log import record as persist_record
 
-        if not overwrite_memory:
-            return
-        if not (result.get("guardrail") or {}).get("rewritten"):
-            return
-        # 单 Agent 路径的短期记忆已由 AgentLoop 写入原文，这里覆盖成护栏后的终稿。
-        # Swarm 路径此时还没写入本轮 assistant，绝不能覆盖上一轮。
-        try:
-            self.short_term_memory.update_last_assistant(
-                session_id, result.get("answer") or ""
+                    persist_record(
+                        kind="guardrail_error",
+                        detail=str(e)[:200],
+                        session_id=session_id,
+                        source="guardrail",
+                    )
+                except Exception:
+                    pass
+                return
+
+            if not overwrite_memory:
+                return
+            if not (result.get("guardrail") or {}).get("rewritten"):
+                return
+            # 单 Agent 路径的短期记忆已由 AgentLoop 写入原文，这里覆盖成护栏后的终稿。
+            # Swarm 路径此时还没写入本轮 assistant，绝不能覆盖上一轮。
+            try:
+                self.short_term_memory.update_last_assistant(
+                    session_id, result.get("answer") or ""
+                )
+            except Exception as e:
+                logger.warning(f"Failed to overwrite short-term memory after guardrail: {e}")
+        finally:
+            add_span(
+                "guardrail",
+                "phase",
+                guardrail_t0,
+                time.monotonic(),
+                {
+                    "rewritten": bool((result.get("guardrail") or {}).get("rewritten")),
+                },
             )
-        except Exception as e:
-            logger.warning(f"Failed to overwrite short-term memory after guardrail: {e}")
 
     def _get_agent_by_id(self, agent_id: str):
         """根据 agent_id 返回对应的 Agent 实例"""
@@ -164,11 +177,11 @@ class SwarmCoordinator:
         if session_id is None:
             session_id = f"{start_time.strftime('%Y%m%d-%H%M%S')}-{str(uuid.uuid4())[:8]}"
 
-        logger.info(f"Processing question (session={session_id}): {question[:50]}...")
-
         collect_token = start_collect()
-        # 分诊之前就 start，急症短路也能留下一条可对比的 trace
+        # 分诊之前就 start，急症短路也能留下一条可对比的 trace；
+        # 且 Processing 日志能带上 extra.trace（patcher 读 ContextVar）
         trace_token = start_trace(session_id, trace_id=trace_id)
+        logger.info(f"Processing question (session={session_id}): {question[:50]}...")
         try:
             result = await self._process_inner(
                 question=question,
@@ -192,7 +205,19 @@ class SwarmCoordinator:
     ) -> Dict[str, Any]:
         # ===== Step 0: 急症分诊（fail-fast）=====
         # 命中急症时跳过记忆检索、任务分解和 Swarm，秒级返回结构化急救指引
+        triage_t0 = time.monotonic()
         triage_result = await self.triage.triage(question)
+        add_span(
+            "triage",
+            "phase",
+            triage_t0,
+            time.monotonic(),
+            {
+                "emergency": bool(triage_result.is_emergency),
+                "category": getattr(triage_result, "category", "") or "",
+                "method": getattr(triage_result, "method", "") or "",
+            },
+        )
         if triage_result.is_emergency:
             result = await self._handle_emergency(
                 question=question,
@@ -210,10 +235,18 @@ class SwarmCoordinator:
         # 若再塞进 context 会导致同一份历史进两次 prompt（且是 dict 字符串形式）
         # Mem0 SDK 是同步 HTTP 客户端；在 async 路径直接调用会卡住事件循环，
         # Swarm 的 asyncio.gather 并行也会被串行化。放到线程池执行。
+        mem0_t0 = time.monotonic()
         similar_memories = await asyncio.to_thread(
             self.long_term_memory.search_similar_sessions,
             query=question,
             limit=3,
+        )
+        add_span(
+            "mem0_search",
+            "phase",
+            mem0_t0,
+            time.monotonic(),
+            {"hits": len(similar_memories or [])},
         )
 
         # 2. 构建增强上下文
@@ -231,8 +264,16 @@ class SwarmCoordinator:
             logger.info(f"Found {len(similar_memories)} similar historical cases from long-term memory")
 
         # Step 1: LeadAgent 分解任务
+        decompose_t0 = time.monotonic()
         assessment = await self.lead_agent.assess_and_decompose(question, enhanced_context)
         subtasks = assessment.get("subtasks", [])
+        add_span(
+            "decompose",
+            "phase",
+            decompose_t0,
+            time.monotonic(),
+            {"subtasks": len(subtasks)},
+        )
 
         logger.info(f"LeadAgent 分解任务：{len(subtasks)} 个")
 
@@ -489,11 +530,13 @@ class SwarmCoordinator:
 
         # Step 3: LeadAgent 汇总结果
         # 即使超时，也尝试汇总已完成的部分结果
+        synth_t0 = time.monotonic()
         final_answer = await self.lead_agent.synthesize_results(
             question=question,
             shared_context=shared_context,
             timeout_occurred=timeout_occurred
         )
+        add_span("synthesize", "phase", synth_t0, time.monotonic())
 
         # Lead 汇总目前没有 AutoFixer；护栏补上这一层。急症路径不会走到这里。
         swarm_result = {"answer": final_answer}

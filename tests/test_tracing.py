@@ -17,6 +17,8 @@ from core.tracing import (
     add_span,
     end_trace,
     get_trace,
+    logger_ctx,
+    patch_log_trace,
     record_llm_usage,
     record_span,
     save_trace,
@@ -259,6 +261,68 @@ class AnswerDonePassthroughTests(unittest.TestCase):
         )
         self.assertIsNone(payload["trace_id"])
         self.assertEqual(payload["usage"]["total_tokens"], 0)
+
+
+class LoggerTraceCtxTests(unittest.TestCase):
+    def test_logger_ctx_dash_without_trace(self):
+        self.assertIsNone(get_trace())
+        self.assertEqual(logger_ctx(), {"trace": "-"})
+
+    def test_logger_ctx_uses_current_trace_id(self):
+        token = start_trace("sess-log", trace_id="cafebabeface")
+        try:
+            self.assertEqual(logger_ctx(), {"trace": "cafebabeface"})
+            record = {"extra": {"trace": "-"}}
+            patch_log_trace(record)
+            self.assertEqual(record["extra"]["trace"], "cafebabeface")
+        finally:
+            end_trace(token)
+        self.assertEqual(logger_ctx(), {"trace": "-"})
+
+    def test_log_line_carries_trace_and_masks_pii(self):
+        from loguru import logger
+
+        from core.log_privacy import install_log_privacy
+
+        install_log_privacy()
+        captured = []
+        hid = logger.add(
+            lambda message: captured.append(str(message).strip()),
+            format="{extra[trace]} | {message}",
+            level="INFO",
+        )
+        token = start_trace("sess-pii", trace_id="trace12token")
+        try:
+            logger.info("Processing question (session=s1): 手机13812345678 感冒了")
+        finally:
+            end_trace(token)
+            logger.remove(hid)
+
+        self.assertEqual(len(captured), 1)
+        line = captured[0]
+        self.assertTrue(line.startswith("trace12token |"))
+        self.assertNotIn("13812345678", line)
+        self.assertIn("1**********", line)
+        self.assertIn("感冒了", line)
+
+    def test_log_without_trace_uses_dash(self):
+        from loguru import logger
+
+        from core.log_privacy import install_log_privacy
+
+        install_log_privacy()
+        self.assertIsNone(get_trace())
+        captured = []
+        hid = logger.add(
+            lambda message: captured.append(str(message).strip()),
+            format="{extra[trace]} | {message}",
+            level="INFO",
+        )
+        try:
+            logger.info("idle")
+        finally:
+            logger.remove(hid)
+        self.assertEqual(captured[0], "- | idle")
 
 
 if __name__ == "__main__":

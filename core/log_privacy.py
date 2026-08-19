@@ -43,14 +43,31 @@ def patch_log_record(record: Dict[str, Any]) -> None:
     extra = record.get("extra")
     if isinstance(extra, dict):
         for key, value in extra.items():
-            if isinstance(value, str):
+            if isinstance(value, str) and key != "trace":
                 extra[key] = mask_pii(value)
 
 
+def _combined_patcher(record: Dict[str, Any]) -> None:
+    """PII 脱敏之后再写入 trace_id，避免把 12 位 hex 误伤，也避免明文进 extra。"""
+    patch_log_record(record)
+    try:
+        from core.tracing import patch_log_trace
+
+        patch_log_trace(record)
+    except Exception:
+        extra = record.get("extra")
+        if isinstance(extra, dict):
+            extra.setdefault("trace", "-")
+
+
 def install_log_privacy() -> None:
-    """在进程入口挂上全局 patcher。幂等，不撤掉已有 handler。"""
+    """在进程入口挂上全局 patcher。幂等，不撤掉已有 handler。
+
+    extra['trace'] 必须预先声明：loguru 不允许 patcher 新增未配置的 extra 键，
+    否则 `{extra[trace]}` 会 KeyError。无当前 Trace 时保持 '-'。
+    """
     global _INSTALLED
     if _INSTALLED:
         return
-    logger.configure(patcher=patch_log_record)
+    logger.configure(extra={"trace": "-"}, patcher=_combined_patcher)
     _INSTALLED = True
