@@ -3,7 +3,7 @@
 
 功能：
 1. 文档向量化和存储
-2. 语义检索
+2. 混合检索（向量 + BM25，RRF 融合；可回退纯向量）
 3. 知识库管理
 
 """
@@ -14,6 +14,15 @@ from loguru import logger
 
 from pymilvus import MilvusClient
 from sentence_transformers import SentenceTransformer
+
+from knowledge.hybrid_retriever import (
+    BM25_TOP_N_DEFAULT,
+    RRF_K_DEFAULT,
+    VECTOR_TOP_N_DEFAULT,
+    BM25Index,
+    annotate_collection,
+    fuse_or_fallback,
+)
 
 
 class MedicalKnowledgeBase:
@@ -31,7 +40,11 @@ class MedicalKnowledgeBase:
         self,
         db_path: str = "./knowledge/data/milvus_lite.db",
         collection_name: str = "medical_knowledge",
-        embedding_model: str = "BAAI/bge-small-zh-v1.5"
+        embedding_model: str = "BAAI/bge-small-zh-v1.5",
+        retrieval_mode: str = "hybrid",
+        rrf_k: int = RRF_K_DEFAULT,
+        bm25_top_n: int = BM25_TOP_N_DEFAULT,
+        vector_top_n: int = VECTOR_TOP_N_DEFAULT,
     ):
         """
         初始化医学知识库
@@ -40,6 +53,10 @@ class MedicalKnowledgeBase:
             db_path: Milvus Lite 数据库文件路径
             collection_name: Collection 名称
             embedding_model: Embedding 模型名称或本地路径
+            retrieval_mode: 默认检索模式 hybrid / vector / bm25（search 可覆盖）
+            rrf_k: RRF 常数 k，默认 60
+            bm25_top_n: 融合前 BM25 召回数
+            vector_top_n: 融合前向量召回数
         """
         # 防止重复初始化
         if hasattr(self, '_initialized'):
@@ -47,6 +64,11 @@ class MedicalKnowledgeBase:
 
         self.db_path = db_path
         self.collection_name = collection_name
+        self.retrieval_mode = retrieval_mode or "hybrid"
+        self.rrf_k = int(rrf_k) if rrf_k else RRF_K_DEFAULT
+        self.bm25_top_n = int(bm25_top_n) if bm25_top_n else BM25_TOP_N_DEFAULT
+        self.vector_top_n = int(vector_top_n) if vector_top_n else VECTOR_TOP_N_DEFAULT
+        self._bm25_index = BM25Index()
 
         # 确保数据目录存在
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +116,7 @@ class MedicalKnowledgeBase:
         except Exception as e:
             logger.warning(f"Failed to load collection at init: {e}")
 
+        self._rebuild_bm25_from_store()
         self._initialized = True
 
     def _chunk_text(self, text: str, chunk_size: int = 1024, overlap: int = 100) -> List[str]:
@@ -169,69 +192,124 @@ class MedicalKnowledgeBase:
             })
 
         # 插入
-        self.milvus_client.insert(self.collection_name, data)
+        insert_result = self.milvus_client.insert(self.collection_name, data)
         logger.info(f"Successfully added {len(data)} chunks")
+        self._rebuild_bm25_from_store()
+        if self._bm25_index.is_empty() and all_chunks:
+            ids = []
+            if isinstance(insert_result, dict):
+                ids = list(insert_result.get("ids") or [])
+            fallback_docs = []
+            for i, chunk in enumerate(all_chunks):
+                fallback_docs.append({
+                    "id": ids[i] if i < len(ids) else f"local-{i}",
+                    "content": chunk["content"],
+                    "metadata": chunk["metadata"],
+                })
+            self._bm25_index.rebuild(fallback_docs)
+            logger.warning(
+                f"BM25 rebuilt from insert payload ({len(self._bm25_index)} chunks); "
+                "store query returned no rows"
+            )
 
         return len(data)
 
-    def search(
-        self,
-        query: str,
-        top_k: int = 5,
-        filter_type: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        检索相关文档
-
-        Args:
-            query: 查询文本
-            top_k: 返回top K个结果
-            filter_type: 可选的类型过滤（如 "lifestyle", "disease_classification"）
-
-        Returns:
-            文档列表，每个文档包含 id, content, metadata, score
-        """
-        logger.debug(f"Searching for: {query} (top_k={top_k}, filter_type={filter_type})")
-
-        # 向量化查询
-        query_vector = self.embedding_model.encode([query])[0]
-
-        # 构建过滤条件
-        filter_expr = None
-        if filter_type:
-            filter_expr = f'metadata like "%\\"type\\": \\"{filter_type}\\"%"'
-
-        # 检索
+    def _milvus_retry(self, op_name: str, fn):
+        """Milvus Lite 空闲 release 后自动 load 再试一次。"""
         try:
-            results = self.milvus_client.search(
-                collection_name=self.collection_name,
-                data=[query_vector.tolist()],
-                limit=top_k,
-                filter=filter_expr,
-                output_fields=["content", "metadata"]
-            )
+            return fn()
         except Exception as e:
-            # Milvus Lite 在空闲一段时间后会自动 release collection（释放内存），
-            # 下次检索前需要重新 load 一次；这里做一次自动重试，避免每次都要重启进程
             if "released" in str(e).lower() or "not loaded" in str(e).lower():
                 try:
                     logger.warning(f"Collection released, reloading: {e}")
                     self.milvus_client.load_collection(self.collection_name)
-                    results = self.milvus_client.search(
-                        collection_name=self.collection_name,
-                        data=[query_vector.tolist()],
-                        limit=top_k,
-                        filter=filter_expr,
-                        output_fields=["content", "metadata"]
-                    )
+                    return fn()
                 except Exception as retry_e:
-                    logger.error(f"Search failed after reload retry: {retry_e}")
-                    return []
-            else:
-                logger.error(f"Search failed: {e}")
-                return []
+                    logger.error(f"{op_name} failed after reload retry: {retry_e}")
+                    return None
+            logger.error(f"{op_name} failed: {e}")
+            return None
 
-        # 格式化结果
+    def _parse_chunk_row(self, row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        try:
+            entity = row.get("entity") if isinstance(row.get("entity"), dict) else row
+            content = entity.get("content") or row.get("content") or ""
+            meta_raw = entity.get("metadata") if "metadata" in entity else row.get("metadata")
+            if isinstance(meta_raw, str):
+                metadata = json.loads(meta_raw)
+            else:
+                metadata = meta_raw or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            return {
+                "id": row.get("id", entity.get("id")),
+                "content": content,
+                "metadata": metadata,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to parse chunk row: {e}")
+            return None
+
+    def _query_all_chunks(self) -> List[Dict[str, Any]]:
+        rows = None
+        for filter_expr in ("id >= 0", "id > -1"):
+            def _do_query(expr=filter_expr):
+                return self.milvus_client.query(
+                    collection_name=self.collection_name,
+                    filter=expr,
+                    output_fields=["content", "metadata"],
+                    limit=16384,
+                )
+
+            rows = self._milvus_retry("Query chunks for BM25", _do_query)
+            if rows:
+                break
+        if not rows:
+            return []
+        docs: List[Dict[str, Any]] = []
+        for row in rows:
+            parsed = self._parse_chunk_row(row if isinstance(row, dict) else {})
+            if parsed and parsed.get("id") is not None:
+                docs.append(parsed)
+        return docs
+
+    def _rebuild_bm25_from_store(self) -> None:
+        """按当前 Milvus collection 全量重建 BM25，与向量库 chunk id 对齐。"""
+        try:
+            docs = self._query_all_chunks()
+            self._bm25_index.rebuild(docs)
+            logger.info(f"BM25 index rebuilt ({len(self._bm25_index)} chunks)")
+        except Exception as e:
+            logger.warning(f"BM25 rebuild failed, vector-only fallback will be used: {e}")
+            self._bm25_index.rebuild([])
+
+    def _vector_search(
+        self,
+        query: str,
+        top_k: int,
+        filter_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if not query or top_k <= 0:
+            return []
+
+        query_vector = self.embedding_model.encode([query])[0]
+        filter_expr = None
+        if filter_type:
+            filter_expr = f'metadata like "%\\"type\\": \\"{filter_type}\\"%"'
+
+        def _do_search():
+            return self.milvus_client.search(
+                collection_name=self.collection_name,
+                data=[query_vector.tolist()],
+                limit=top_k,
+                filter=filter_expr,
+                output_fields=["content", "metadata"],
+            )
+
+        results = self._milvus_retry("Vector search", _do_search)
+        if not results:
+            return []
+
         documents = []
         for hits in results:
             for hit in hits:
@@ -242,12 +320,90 @@ class MedicalKnowledgeBase:
                         "metadata": json.loads(hit["entity"]["metadata"]),
                         # MilvusClient 在 metric_type="COSINE" 下返回的 distance 本身就是
                         # 余弦相似度（越大越相关），直接作为 score，不能做 1-x 反转
-                        "score": hit["distance"]
+                        "score": hit["distance"],
+                        "vector_score": hit["distance"],
+                        "collection": self.collection_name,
                     })
                 except Exception as e:
                     logger.warning(f"Failed to parse result: {e}")
                     continue
+        return documents
 
+    def _bm25_search(
+        self,
+        query: str,
+        top_n: int,
+        filter_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if self._bm25_index.is_empty():
+            return []
+        try:
+            hits = self._bm25_index.search(query, top_n=top_n, filter_type=filter_type)
+        except Exception as e:
+            logger.warning(f"BM25 search failed: {e}")
+            return []
+        return annotate_collection(hits, self.collection_name)
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        filter_type: Optional[str] = None,
+        mode: Optional[str] = None,
+        rrf_k: Optional[int] = None,
+        bm25_top_n: Optional[int] = None,
+        vector_top_n: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        检索相关文档。默认 hybrid：向量与 BM25 各取 top-N，再按 RRF 融合。
+
+        Args:
+            query: 查询文本
+            top_k: 最终返回条数
+            filter_type: 可选的类型过滤（如 "lifestyle", "disease_classification"）
+            mode: hybrid / vector / bm25，默认实例的 retrieval_mode（hybrid）
+            rrf_k: RRF 常数，默认 60
+            bm25_top_n: 融合前 BM25 召回数
+            vector_top_n: 融合前向量召回数
+
+        Returns:
+            文档列表，字段 id / content / metadata / score / collection。
+            hybrid 时 score 为归一化 RRF（0–1），原始融合分在 rrf_score；
+            另附 vector_score / bm25_score（若该路召回过）。
+        """
+        resolved_mode = mode or self.retrieval_mode or "hybrid"
+        if resolved_mode not in ("hybrid", "vector", "bm25"):
+            resolved_mode = "hybrid"
+        fusion_k = int(rrf_k) if rrf_k else self.rrf_k
+        v_n = max(int(vector_top_n) if vector_top_n else self.vector_top_n, top_k)
+        b_n = max(int(bm25_top_n) if bm25_top_n else self.bm25_top_n, top_k)
+
+        logger.debug(
+            f"Searching for: {query} (top_k={top_k}, filter_type={filter_type}, mode={resolved_mode})"
+        )
+
+        if resolved_mode == "vector":
+            documents = self._vector_search(query, top_k=top_k, filter_type=filter_type)
+            logger.debug(f"Found {len(documents)} documents")
+            return documents
+
+        bm25_hits = self._bm25_search(query, top_n=b_n, filter_type=filter_type)
+        if resolved_mode == "bm25" and bm25_hits:
+            logger.debug(f"Found {len(bm25_hits[:top_k])} documents")
+            return bm25_hits[:top_k]
+        if not bm25_hits:
+            documents = self._vector_search(query, top_k=top_k, filter_type=filter_type)
+            logger.debug(f"Found {len(documents)} documents (vector fallback)")
+            return documents
+
+        vector_hits = self._vector_search(query, top_k=v_n, filter_type=filter_type)
+        documents = fuse_or_fallback(
+            vector_hits,
+            bm25_hits,
+            mode="hybrid",
+            rrf_k=fusion_k,
+            top_k=top_k,
+        )
         logger.debug(f"Found {len(documents)} documents")
         return documents
 
@@ -295,6 +451,7 @@ class MedicalKnowledgeBase:
             "content": content,
             "metadata": metadata if isinstance(metadata, dict) else {},
             "score": 0.0,
+            "collection": self.collection_name,
         }
 
     def delete_collection(self):
@@ -302,6 +459,11 @@ class MedicalKnowledgeBase:
         if self.milvus_client.has_collection(self.collection_name):
             self.milvus_client.drop_collection(self.collection_name)
             logger.info(f"Deleted collection: {self.collection_name}")
+        self._bm25_index.rebuild([])
+
+    def bm25_size(self) -> int:
+        """当前 BM25 索引中的 chunk 数。"""
+        return len(self._bm25_index)
 
     def count_documents(self) -> int:
         """统计文档数量"""

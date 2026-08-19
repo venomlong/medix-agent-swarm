@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 - **🤖 Agent Loop**: LLM 驱动的 Skill 调用循环，Agent 自主规划、调用 Skills 并完成任务 ✅
 - **🐝 Agent Swarm**: 真正的群体智能（去中心化协作，自主任务认领，并行执行）✅
 - **🧠 记忆系统**: 短期记忆（会话级对话历史，默认 Redis）+ 长期记忆（Mem0跨会话记忆）+ **多轮对话上下文利用** ✅
-- **💾 Milvus 知识库**: 统一知识管理，语义检索，支持模糊查询（"血压高" → "高血压"）✅
+- **💾 Milvus 知识库**: 统一知识管理，向量语义检索 + BM25 关键词，RRF 混合融合；支持模糊查询（"血压高" → "高血压"）✅
 - **⚡ Claude Code Skills**: 9个预定义技能（7个原子 + 2个记忆），一键调用医疗助手 ✅
 - **🏗️ Harness Engineering**: 约束驱动 + 熵管理，系统自动验证和优化，保证安全、简洁、高质量 ✅
 - **🛡️ 医疗安全纵深**: 输入侧急症 fail-fast、有害内容拦截、输出护栏、RAG 来源卡片、日志 PII 脱敏 ✅
@@ -107,11 +107,11 @@ Trace 结构示例（字段与 `core/tracing.py` 的 `Trace.to_dict()` 一致；
 |------|------|--------|----------|
 | 安全红线 | 规则层 `rules_only` | 35 | 急症召回 **100%**，漏报 **0**，误伤率 **0%**，非边缘准确率 **100%** |
 | 路由 | **`--offline` 启发式**（不是真实 LLM） | 40 | 模式准确率 **87.5%**（Agent 全匹配 87.5%，部分匹配 12.5%） |
-| RAG | 本地 Milvus | 30 | recall@1 **83.3%**，recall@3 **100%**，recall@5 **100%**，MRR **0.9056** |
+| RAG | 本地 Milvus **hybrid**（向量+BM25 RRF） | 30 | recall@1 **86.7%**，recall@3 **100%**，recall@5 **100%**，MRR **0.9278**（vector-only 对照：recall@1 83.3%，MRR 0.9056） |
 
 **路由数字免责声明**：`87.5%` 来自 `evals/run_routing_eval.py --offline`，按 LeadAgent 提示词策略做规则分解，**不调用 LLM**。正式路由准确率需去掉 `--offline` 跑真实分解（依赖仓库外 `../config.py` 的 API，密钥不要写入本仓库）。离线失败形态是 5 条指南类 `partial`（例如指南题被启发式拆成 Swarm），详见报告。
 
-**单元测试**：`python -m unittest discover -s tests`，**145** 项通过（mock LLM，不打付费 API）。
+**单元测试**：`python -m unittest discover -s tests`，**158** 项通过（mock LLM，不打付费 API）。
 
 ### 复现（Windows PowerShell）
 
@@ -124,8 +124,8 @@ Trace 结构示例（字段与 `core/tracing.py` 的 `Trace.to_dict()` 一致；
 # 路由：启发式离线（对应上表 87.5%；不是真实 LLM）
 .venv\Scripts\python.exe evals\run_routing_eval.py --offline
 
-# RAG（本地 Milvus；首次会加载 embedding 模型）
-.venv\Scripts\python.exe evals\run_rag_eval.py
+# RAG（本地 Milvus；默认 hybrid=向量+BM25 RRF；首次会加载 embedding 模型）
+.venv\Scripts\python.exe evals\run_rag_eval.py --compare
 
 # 汇总 markdown 报告 → evals/results/<date>_report.md
 .venv\Scripts\python.exe evals\report.py
@@ -388,7 +388,7 @@ medix-agent-swarm/
 
 | Skill | 功能 | 数据源 | 特点 |
 |-------|------|--------|------|
-| `search_knowledge` | 搜索医学知识库 | Milvus | 语义检索 |
+| `search_knowledge` | 搜索医学知识库 | Milvus | 向量 + BM25 RRF 混合检索 |
 | `recommend_lifestyle` | 生活方式和用药建议 | Milvus | 个性化建议 |
 | `assess_risk` | 风险等级评估 | 规则引擎 | 高危症状识别 |
 | `analyze_symptoms` | 症状模式分析 | 规则引擎 | 多系统分析 |
@@ -426,7 +426,7 @@ medix-agent-swarm/
 - ✅ **Skills 自包含**: 直接调用 Milvus 或内置逻辑
 - ✅ **Agent 灵活性**: 每个 Agent 注册全部9个 Skills，根据任务自主选择
 - ✅ **SkillRegistry**: 统一管理注册、执行、格式转换
-- ✅ **统一知识库**: 医学知识统一存储在 Milvus 向量数据库，支持语义检索
+- ✅ **统一知识库**: 医学知识统一存储在 Milvus 向量数据库，支持向量 + BM25 RRF 混合检索
 - ✅ **易于扩展**: 添加新 Skill 或新知识无需修改 Agent 代码
 
 
@@ -608,6 +608,7 @@ python examples/test_all.py
 
 - **向量数据库**: Milvus Lite（本地文件，无需服务器）
 - **Embedding 模型**: BAAI/bge-small-zh-v1.5（中文，512维）
+- **检索**: 默认 hybrid。向量 COSINE 与 BM25（jieba 分词）各取 top-N，再按 Reciprocal Rank Fusion 融合：`score(d) = Σ 1/(k + rank_i(d))`，默认 `k=60`，`bm25_top_n=20`，`vector_top_n=20`。`search(..., mode="vector")` 可退回纯向量；BM25 索引为空或失败时自动回退向量。hybrid 的 `score` 为归一化 RRF（0–1），原始融合分在 `rrf_score`。
 - **数据存储**: `knowledge/data/documents/` (txt 文档)
 - **初始化**: `python knowledge/scripts/import_hardcoded_data.py`
 
@@ -718,7 +719,7 @@ python examples/test_all.py
   - [x] 数据导入脚本（knowledge/scripts/import_hardcoded_data.py）
 
 - [x] **Skills 重构**
-  - [x] `search_knowledge` → Milvus 语义检索
+  - [x] `search_knowledge` → Milvus 混合检索（向量 + BM25 RRF）
   - [x] `recommend_lifestyle` → Milvus 检索生活方式建议
   - [x] `disease_code` → Milvus 检索 ICD-10 编码
   - [x] `clinical_guideline` → Milvus 检索临床指南
@@ -727,6 +728,7 @@ python examples/test_all.py
   - [x] 模糊查询支持（"血压高" → "高血压"）
   - [x] 按类型过滤（lifestyle, disease_classification, clinical_guideline）
   - [x] 相似度评分
+  - [x] BM25 关键词检索 + 向量 RRF 混合（默认 hybrid，`mode="vector"` 可回退）
 
 ### ✅ 阶段 7: Harness Engineering 融合（已完成）
 

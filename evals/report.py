@@ -217,11 +217,15 @@ def build_markdown(payloads: Dict[str, Tuple[Path, Dict[str, Any]]]) -> str:
         m = data.get("metrics") or {}
         mrr_val = m.get("mrr")
         mrr_s = f"{mrr_val:.4f}" if isinstance(mrr_val, float) else str(mrr_val)
-        lines.extend(
+        rag_lines = [
+            "## RAG 明细",
+            "",
+            f"- 模式: `{data.get('mode')}`",
+        ]
+        if data.get("retrieval_mode"):
+            rag_lines.append(f"- 检索: `{data.get('retrieval_mode')}`（hybrid=向量+BM25 RRF）")
+        rag_lines.extend(
             [
-                "## RAG 明细",
-                "",
-                f"- 模式: `{data.get('mode')}`",
                 f"- recall@1: {_metric(m, 'recall_at_1')}",
                 f"- recall@3: {_metric(m, 'recall_at_3')}",
                 f"- recall@5: {_metric(m, 'recall_at_5')}",
@@ -229,6 +233,23 @@ def build_markdown(payloads: Dict[str, Tuple[Path, Dict[str, Any]]]) -> str:
                 "",
             ]
         )
+        baseline = data.get("baseline_vector") or {}
+        bm = baseline.get("metrics") or {}
+        if bm:
+            b_mrr = bm.get("mrr")
+            b_mrr_s = f"{b_mrr:.4f}" if isinstance(b_mrr, float) else str(b_mrr)
+            rag_lines.extend(
+                [
+                    "### vector-only 对照",
+                    "",
+                    f"- recall@1: {_metric(bm, 'recall_at_1')}",
+                    f"- recall@3: {_metric(bm, 'recall_at_3')}",
+                    f"- recall@5: {_metric(bm, 'recall_at_5')}",
+                    f"- MRR: {b_mrr_s}",
+                    "",
+                ]
+            )
+        lines.extend(rag_lines)
         fails = _fail_rows(data.get("items") or [], lambda it: (it.get("recall@5") or 0) < 1.0)
         lines.extend(
             _render_failures(
@@ -251,7 +272,7 @@ def build_markdown(payloads: Dict[str, Tuple[Path, Dict[str, Any]]]) -> str:
             "```powershell",
             ".venv\\Scripts\\python.exe evals\\run_safety_eval.py",
             ".venv\\Scripts\\python.exe evals\\run_routing_eval.py --offline",
-            ".venv\\Scripts\\python.exe evals\\run_rag_eval.py",
+            ".venv\\Scripts\\python.exe evals\\run_rag_eval.py --compare",
             ".venv\\Scripts\\python.exe evals\\report.py",
             "```",
             "",
