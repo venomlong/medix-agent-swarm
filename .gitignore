@@ -68,3 +68,12 @@ memory/swarm/traces/*.jsonl
 
 # 测试运行日志
 test_run_report.log
+
+# 评测运行时 JSON / 带日期报告（每次跑分会生成时间戳文件）
+evals/results/*.json
+evals/results/*_report.md
+!evals/results/SAMPLE_offline_report.md
+!evals/results/.gitkeep
+
+# RAG 评测用的独立 Milvus Lite（避免与运行中的服务抢锁）
+evals/.cache/
