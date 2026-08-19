@@ -21,6 +21,118 @@ https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 - **💾 Milvus 知识库**: 统一知识管理，语义检索，支持模糊查询（"血压高" → "高血压"）✅
 - **⚡ Claude Code Skills**: 9个预定义技能（7个原子 + 2个记忆），一键调用医疗助手 ✅
 - **🏗️ Harness Engineering**: 约束驱动 + 熵管理，系统自动验证和优化，保证安全、简洁、高质量 ✅
+- **🛡️ 医疗安全纵深**: 输入侧急症 fail-fast、输出护栏、RAG 来源卡片、日志 PII 脱敏 ✅
+- **📡 可观测性**: 请求级 `trace_id` / span / token 成本，`GET /api/traces/{session_id}` 可回溯 ✅
+- **📊 量化评测**: 安全红线 / 路由 / RAG 三套 golden set，数字可复现（见[评测结果](#-评测结果)） ✅
+
+## 🛡️ 医疗安全设计
+
+医疗助手和普通 chatbot 的差别在于：**漏报急症有后果，确定性诊断/剂量指令不能出口**。本项目把安全做成纵深，而不是只在答案末尾拼一段免责声明。
+
+```
+用户输入
+   │
+   ▼
+[输入] EmergencyTriage  ──急症命中──► 秒级急救指引（跳过 Swarm）
+   │ 未命中
+   ▼
+[过程] 约束白名单 + Agent Loop + RAG 来源收集
+   │
+   ▼
+[输出] OutputGuardrail ──违规──► 规则检出 → LLM 改写 / 正则兜底
+   │
+   ▼
+答案 + 来源卡片 + 安全 JSONL 记录
+```
+
+| 层 | 解决什么 | 怎么做 | 怎么验证 |
+|----|----------|--------|----------|
+| **输入分诊** | 胸痛冒冷汗若走完整 Swarm，演示里要等约 60s，急症场景不可接受 | `safety/triage.py`：强规则 + 组合规则毫秒判定；边缘词才交给 LLM。命中后 `SwarmCoordinator` 短路，SSE 发 `emergency_triggered`，前端红色横幅 | 规则层评测 35 条：急症召回 100%，漏报 0，误伤率 0%（见下表） |
+| **过程约束** | Agent 不能越权调工具；知识库答案必须可核对 | YAML 约束 + `AutoFixer` 补免责/就医提醒；Milvus hit 经 `core/source_collector.py` 收集，前端展示文档名 / 相关度 / 原文片段 | `tests/test_source_collector.py`；答案卡「参考来源」 |
+| **输出护栏** | 「你得的是心肌炎」「每次 100mg」这类深层违规，字符串拼接发现不了 | `validation/guardrail.py`：规则层常开；仅违规时 LLM 重写，再失败则正则保守替换。急症短路路径不过护栏，避免拖慢 fail-fast | `tests/test_guardrail.py`；`/api/safety/fixes` 读 JSONL（重启仍在） |
+| **日志脱敏** | 对话里可能出现手机号/身份证/邮箱 | `core/log_privacy.py` 的 `mask_pii` 挂到 loguru patcher；traces / safety_log 落盘前同样掩码 | `tests/test_log_privacy.py` |
+
+阴性对照同样重要：`"感冒了怎么办"` 必须走原流程，不能被分诊误伤。这是评测集里 10 条阴性用例存在的原因。
+
+## 📡 可观测性
+
+没有 trace 时，并发 Worker 的日志会交错，也答不上「这次请求花了多少 token、慢在哪一步」。实现上**不引入 OpenTelemetry**，用与来源收集器相同的 ContextVar 模式，把一次 `/api/chat` 绑成一条 Trace。
+
+**一次请求能回答的问题**
+
+- 用了多少 token、估算多少钱（`answer_done.usage`：`total_tokens` / `cost` / `llm_calls`）
+- 每步耗时：`triage` / `decompose` / `llm_call` / `skill:*` / `guardrail` 等 span
+- 日志行带 `trace_id` 短标识，可按请求过滤
+
+**查询与落盘**
+
+- `GET /api/traces/{session_id}`：读 `memory/swarm/traces/{session_id}.jsonl`，返回该会话历次 trace（含 span 列表）。文件不存在返回空列表，不 404
+- `GET /api/stats`：`extra` 中带本进程累计 `total_tokens` / `total_cost` / `llm_calls`（重启归零；会话 traces 文件仍在盘上）
+- 前端：Dashboard 有「累计 Token / 累计成本」卡片；Workbench 答案旁显示本次消耗
+
+Trace 结构示例（字段与 `core/tracing.py` 的 `Trace.to_dict()` 一致；数字为示意）：
+
+```json
+{
+  "trace_id": "cafe1234beef",
+  "session_id": "20260819-140000-abcd1234",
+  "started_at": "2026-08-19T14:00:00.123",
+  "prompt_tokens": 800,
+  "completion_tokens": 200,
+  "total_tokens": 1000,
+  "llm_calls": 2,
+  "cost": 0.0032,
+  "elapsed": 3.21,
+  "span_count": 2,
+  "spans": [
+    {"name": "triage", "kind": "phase", "duration_ms": 12.0, "meta": {}},
+    {"name": "llm_call", "kind": "llm", "duration_ms": 2100.0, "meta": {"agent": "consultation_agent"}}
+  ]
+}
+```
+
+急症短路路径同样打 trace，通常只有一条 `triage` span——用来对比「秒级短路 vs 完整 Swarm」，而不是把急症请求变成黑盒。SSE 协议与查询接口说明见 [`docs/frontend-backend-integration.md`](docs/frontend-backend-integration.md)。
+
+## 📊 评测结果
+
+评测把「确定性单测」和「统计性评估」拆开：`tests/` 全程 mock LLM；`evals/` 用 golden set 出数字。下表是 **2026-08-19 离线实跑**（报告：[`evals/results/20260819_report.md`](evals/results/20260819_report.md)），不是 LLM-as-judge，也没有刷分。
+
+| 任务 | 模式 | 样本量 | 关键指标 |
+|------|------|--------|----------|
+| 安全红线 | 规则层 `rules_only` | 35 | 急症召回 **100%**，漏报 **0**，误伤率 **0%**，非边缘准确率 **100%** |
+| 路由 | **`--offline` 启发式**（不是真实 LLM） | 40 | 模式准确率 **87.5%**（Agent 全匹配 87.5%，部分匹配 12.5%） |
+| RAG | 本地 Milvus | 30 | recall@1 **83.3%**，recall@3 **100%**，recall@5 **100%**，MRR **0.9056** |
+
+**路由数字免责声明**：`87.5%` 来自 `evals/run_routing_eval.py --offline`，按 LeadAgent 提示词策略做规则分解，**不调用 LLM**。正式路由准确率需去掉 `--offline` 跑真实分解（依赖仓库外 `../config.py` 的 API，密钥不要写入本仓库）。离线失败形态是 5 条指南类 `partial`（例如指南题被启发式拆成 Swarm），详见报告。
+
+**单元测试**：`python -m unittest discover -s tests`，**123** 项通过（mock LLM，不打付费 API）。
+
+### 复现（Windows PowerShell）
+
+在仓库根目录 `medix-agent-swarm` 下：
+
+```powershell
+# 安全红线（规则层，秒级）
+.venv\Scripts\python.exe evals\run_safety_eval.py
+
+# 路由：启发式离线（对应上表 87.5%；不是真实 LLM）
+.venv\Scripts\python.exe evals\run_routing_eval.py --offline
+
+# RAG（本地 Milvus；首次会加载 embedding 模型）
+.venv\Scripts\python.exe evals\run_rag_eval.py
+
+# 汇总 markdown 报告 → evals/results/<date>_report.md
+.venv\Scripts\python.exe evals\report.py
+
+# 单测
+.venv\Scripts\python.exe -m unittest discover -s tests
+```
+
+真实 LLM 路由（可选，需已配置 `../config.py`）：
+
+```powershell
+.venv\Scripts\python.exe evals\run_routing_eval.py
+```
 
 ## 🎯 Skills 直达架构
 
