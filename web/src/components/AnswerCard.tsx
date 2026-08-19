@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AnswerPayload, AnswerReveal, AnswerUsage, SourceRef } from "../types";
+import type { AnswerPayload, AnswerReveal, AnswerUsage, GuardrailInfo, SourceRef } from "../types";
 import { AgentAvatarGroup } from "./AgentAvatar";
 
 type Props = {
@@ -15,6 +15,8 @@ const DEFAULT_REVEAL: AnswerReveal = {
   disclaimer: true,
 };
 
+const EMERGENCY_ALERT = "检测到疑似急症，系统已跳过常规分析流程，请优先执行急救指引。";
+
 function scoreLabel(score: number): string {
   const pct = score <= 1 ? Math.round(score * 100) : Math.round(score);
   return `${pct}%`;
@@ -27,10 +29,21 @@ function formatYuan(cost: number): string {
   return `¥${cost.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
 }
 
-function usageHeadLabel(usage?: AnswerUsage): string {
+function usageChipLabel(usage?: AnswerUsage): string {
   if (!usage) return "";
   const tokens = Math.max(0, Math.round(usage.totalTokens));
+  const calls = Math.max(0, Math.round(usage.llmCalls));
+  if (tokens <= 0 && calls <= 0) return "本轮未采到 usage";
   return `${tokens.toLocaleString("zh-CN")} tok · ${formatYuan(usage.cost)}`;
+}
+
+function guardrailLabel(info: GuardrailInfo): string {
+  const bits = ["输出护栏已介入"];
+  if (info.rewritten) bits.push("并改写答案");
+  if (info.action) bits.push(info.action);
+  const first = info.violations?.find((v) => v.type)?.type;
+  if (first) bits.push(first);
+  return bits.join(" · ");
 }
 
 function SourcePills({ sources }: { sources: SourceRef[] }) {
@@ -69,7 +82,9 @@ function SourcePills({ sources }: { sources: SourceRef[] }) {
 export function AnswerCard({ answer, streaming, reveal }: Props) {
   const r = reveal ?? DEFAULT_REVEAL;
   const emergency = Boolean(answer.emergency);
-  const usageText = usageHeadLabel(answer.usage);
+  const alertText = (answer.alert || "").trim() || (emergency ? EMERGENCY_ALERT : "");
+  const usageText = usageChipLabel(answer.usage);
+  const guardrail = answer.guardrail;
   return (
     <article className={`answer${emergency ? " emergency" : ""}`}>
       <div className="answer-head">
@@ -78,19 +93,22 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
           {emergency ? "急症分诊 · 已短路常规协作流程" : `${answer.agentCount} 个专业 Agent 协作回答`}
         </span>
         <span style={{ flex: 1 }} />
-        <span
-          className="mono muted"
-          style={{ fontSize: 12, whiteSpace: "nowrap" }}
-          title={answer.traceId ? `trace ${answer.traceId}` : undefined}
-        >
-          {answer.elapsed}
-          {usageText ? ` · ${usageText}` : ""}
-        </span>
+        <div className="answer-meta">
+          <span className="mono muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+            {answer.elapsed}
+          </span>
+          {usageText ? <span className="usage-chip">{usageText}</span> : null}
+          {answer.traceId ? (
+            <span className="trace-chip" title={answer.traceId}>
+              trace {answer.traceId}
+            </span>
+          ) : null}
+        </div>
       </div>
 
-      {r.alert && answer.alert ? (
+      {r.alert && alertText ? (
         <div className={`alert-bar${emergency ? " critical" : ""}`}>
-          {answer.alert}
+          {alertText}
           {answer.alertNote ? (
             <div style={{ fontWeight: 400, fontSize: 11, marginTop: 2 }}>{answer.alertNote}</div>
           ) : null}
@@ -114,6 +132,8 @@ export function AnswerCard({ answer, streaming, reveal }: Props) {
       ) : null}
 
       {r.sources && answer.sources.length > 0 ? <SourcePills sources={answer.sources} /> : null}
+
+      {guardrail?.triggered ? <p className="guardrail-hint">{guardrailLabel(guardrail)}</p> : null}
 
       {r.disclaimer ? (
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>

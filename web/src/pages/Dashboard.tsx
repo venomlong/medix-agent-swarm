@@ -44,15 +44,26 @@ export function Dashboard() {
   useEffect(() => {
     if (mock) return;
     let cancelled = false;
-    getRuntimeStats()
-      .then((data) => {
-        if (!cancelled) setStats(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
+    const load = () => {
+      getRuntimeStats()
+        .then((data) => {
+          if (!cancelled) {
+            setStats(data);
+            setError("");
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        });
+    };
+    load();
+    const timer = window.setInterval(load, 8000);
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
     };
   }, [mock]);
 
@@ -81,7 +92,7 @@ export function Dashboard() {
       <p className="page-lede">
         {mock
           ? "会话量、Swarm 占比、平均耗时与安全自动修复次数，一眼可知系统运行状态。"
-          : "计数来自当前 webapi 进程内存，服务重启后归零。Token / 成本 / LLM 调用次数同样为本进程累计。"}
+          : "计数来自当前 webapi 进程内存，服务重启后归零。Token / 成本 / LLM 调用次数同样为本进程累计；对话后本页约 8 秒刷新。LLM 未回 usage 时保持 0。"}
       </p>
       {error ? <div className="card empty-hint">{error}</div> : null}
 

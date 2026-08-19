@@ -1,4 +1,5 @@
 import {
+  EMERGENCY_ANSWER,
   FOLLOWUP_ANSWER,
   SIMPLE_ANSWER,
   SWARM_ANSWER,
@@ -27,6 +28,16 @@ function nowTs(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function isEmergency(question: string): boolean {
+  const text = question || "";
+  if (["压榨性疼痛", "压榨性胸痛", "昏迷", "大出血", "自杀", "活不下去", "喘不上气"].some((k) => text.includes(k))) {
+    return true;
+  }
+  const chest = text.includes("胸痛") || text.includes("胸口疼") || text.includes("胸口痛");
+  const sweat = text.includes("冷汗") || text.includes("冒冷汗") || text.includes("大汗");
+  return chest && sweat;
 }
 
 function isComplex(question: string): boolean {
@@ -92,15 +103,35 @@ export function simulateConsultation(question: string, h: SimulateHandlers): () 
     timers.push(id);
   };
 
-  const complex = isComplex(question) && !isFollowup(question);
-  let steps = complex ? swarmSteps() : singleSteps();
+  const emergency = isEmergency(question);
+  const complex = !emergency && isComplex(question) && !isFollowup(question);
+  let steps = emergency
+    ? [
+        {
+          id: "triage",
+          title: "急症分诊",
+          agentLabel: "EmergencyTriage",
+          status: "running" as const,
+          desc: "正在进行急症分诊……",
+          skills: [],
+        },
+      ]
+    : complex
+      ? swarmSteps()
+      : singleSteps();
 
   h.onRouting("pending");
   h.onSteps(steps);
-  h.onEvent({ ts: nowTs(), name: "swarm_started" });
+  if (!emergency) {
+    h.onEvent({ ts: nowTs(), name: "swarm_started" });
+  }
 
   later(700, () => {
-    if (complex) {
+    if (isEmergency(question)) {
+      h.onRouting("emergency", 0);
+      h.onEvent({ ts: nowTs(), name: "emergency_triggered · cardiac" });
+      runEmergency();
+    } else if (complex) {
       h.onRouting("swarm", 3);
       h.onEvent({ ts: nowTs(), name: "task_decomposed ×3" });
       runSwarm();
@@ -110,6 +141,24 @@ export function simulateConsultation(question: string, h: SimulateHandlers): () 
       runSingle();
     }
   });
+
+  function runEmergency() {
+    later(0, () => {
+      h.onSteps([
+        {
+          id: "triage",
+          title: "急症分诊",
+          agentLabel: "EmergencyTriage",
+          status: "done",
+          desc: "命中急症规则，已短路常规 Swarm 流程",
+          skills: [],
+        },
+      ]);
+    });
+    later(240, () => {
+      startAnswer(EMERGENCY_ANSWER, 1);
+    });
+  }
 
   function runSwarm() {
     later(0, () => {

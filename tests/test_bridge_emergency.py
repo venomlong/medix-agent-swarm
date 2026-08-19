@@ -56,6 +56,21 @@ class EmergencyLiveListenerTests(unittest.TestCase):
         self.assertEqual(payload["body"], "立即拨打 120")
         self.assertFalse(payload["swarm_enabled"])
 
+    def test_map_answer_done_emergency_fills_default_alert(self):
+        payload = map_answer_done(
+            {
+                "answer": "立即拨打 120",
+                "emergency": True,
+                "swarm_enabled": False,
+            },
+            "sess-em-fallback",
+            0.2,
+        )
+        self.assertTrue(payload["emergency"])
+        self.assertTrue(payload["alert"])
+        self.assertIn("急症", payload["alert"])
+        self.assertEqual(payload["alert_note"], "急症分诊已短路常规 Swarm")
+
 
 if __name__ == "__main__":
     unittest.main()

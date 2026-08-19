@@ -166,10 +166,20 @@ data: <JSON>
   ],
   "emergency": false,
   "guardrail": null,
+  "usage": {
+    "total_tokens": 1200,
+    "prompt_tokens": 900,
+    "completion_tokens": 300,
+    "llm_calls": 2,
+    "cost": 0.0042
+  },
+  "trace_id": "cafe1234beef",
   "swarm_enabled": true,
   "session_id": "…"
 }
 ```
+
+`usage` **始终存在**（即使本轮 LLM 未回 token，字段为 0）。前端答案卡右上角展示 `N tok · ¥…`；token 与 `llm_calls` 均为 0 时展示「本轮未采到 usage」，不要把该对象丢掉。`trace_id` 为 12 位 hex，答案卡以 `trace …` 芯片展示，亦可作为 `GET /api/traces/{session_id}` 的索引。
 
 `guardrail` 在输出护栏命中时为对象，例如：
 
@@ -182,7 +192,9 @@ data: <JSON>
 }
 ```
 
-未命中时为 `null` / 省略。急症短路路径不过护栏。
+未命中时为 `null` / 省略。急症短路路径不过护栏。前端在 `guardrail.triggered` 为 true 时于答案卡展示一条低调提示（如「输出护栏已介入并改写答案」）。
+
+急症：`emergency=true` 且 `alert` 为非空字符串（缺省时 bridge 会补默认文案）。前端渲染红色 `.alert-bar.critical`、路由徽标「急症短路」，事件流含 `emergency_triggered`。
 
 `sources` 为知识库 chunk 引用列表（无检索命中或急症短路时为 `[]`，不伪造）。每条：
 
@@ -195,7 +207,7 @@ data: <JSON>
 | `score` | COSINE 相似度，越大越相关 |
 | `snippet` | `content` 前 120 字 |
 
-M1 允许：`alert` 为空；若答案正文含「重要提醒」「就医」，前端可先从 `body` 启发式拆条（或暂不拆）。结构化拆分标为 M1.5。
+M1 允许：非急症时 `alert` 可为空；若答案正文含「重要提醒」「就医」「拨打 120」，前端可从 `body` 启发式拆条。急症路径必须有 `alert`（bridge 兜底）。
 
 **错误帧**
 

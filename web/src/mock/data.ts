@@ -69,6 +69,8 @@ export const FOLLOWUP_ANSWER: Omit<AnswerPayload, "elapsed"> = {
   ] satisfies SourceRef[],
   disclaimer: "以上分析仅供参考，不能替代医生诊断。",
   agentCount: 1,
+  usage: { totalTokens: 380, cost: 0.0009, llmCalls: 1 },
+  traceId: "demo-follow01",
 };
 
 export const SIMPLE_ANSWER: Omit<AnswerPayload, "elapsed"> = {
@@ -91,6 +93,26 @@ export const SIMPLE_ANSWER: Omit<AnswerPayload, "elapsed"> = {
   ] satisfies SourceRef[],
   disclaimer: "以上分析仅供参考，不能替代医生诊断。",
   agentCount: 1,
+  usage: { totalTokens: 420, cost: 0.0012, llmCalls: 1 },
+  traceId: "demo-simple01",
+};
+
+export const EMERGENCY_ANSWER: Omit<AnswerPayload, "elapsed"> = {
+  body:
+    "🚨 **急症提醒**\n\n您描述的症状提示可能存在心脏急症（如心肌梗死）。\n\n请立即采取以下措施：\n1. **立即拨打 120 急救电话**，说明症状和所在位置\n2. 立即停止一切活动，原地坐下或半卧位休息，保持镇静\n3. **不要自行驾车或步行去医院**，等待救护车",
+  alert: "检测到疑似急症，系统已跳过常规分析流程，请优先执行急救指引。",
+  alertNote: "急症分诊已短路常规 Swarm",
+  suggestions: [
+    "立即拨打 120 急救电话",
+    "在专业人员到达前，按上述指引进行现场处理",
+    "本系统无法处理急症，请勿依赖在线咨询延误救治",
+  ],
+  sources: [],
+  disclaimer: "本提醒由急症分诊规则自动生成，仅为应急参考，不能替代专业急救指导。请立即联系急救服务。",
+  agentCount: 1,
+  emergency: true,
+  usage: { totalTokens: 0, cost: 0, llmCalls: 0 },
+  traceId: "demo-emerg01",
 };
 
 export function swarmSteps(): TimelineStep[] {

@@ -36,6 +36,12 @@ function timeLabel(): string {
   return `今天 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const EXAMPLE_PROMPTS = [
+  { title: "急症短路", text: "胸口压榨性疼痛还出冷汗" },
+  { title: "知识库引用", text: "高血压饮食注意什么" },
+  { title: "普通咨询", text: DEFAULT_QUESTION },
+] as const;
+
 const EMPTY_REVEAL: AnswerReveal = {
   alert: false,
   suggestions: false,
@@ -398,20 +404,27 @@ export function Workbench() {
           {messages.length === 0 && historyReady ? (
             <>
               <div className="time-center">今天</div>
-              <button
-                type="button"
-                className="card example-card"
-                onClick={() => {
-                  setInput(DEFAULT_QUESTION);
-                }}
-              >
-                <h3>示例问题</h3>
-                <p>{DEFAULT_QUESTION}</p>
-                <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                  已预填到输入框。点击发送，将走智能路由 → 协作时间线 → 答案流出
-                  {USE_MOCK ? "（当前为本地 mock）。" : "。请先启动后端 :8000。"}
-                </p>
-              </button>
+              <div className="example-grid">
+                {EXAMPLE_PROMPTS.map((ex) => (
+                  <button
+                    key={ex.title}
+                    type="button"
+                    className="card example-card"
+                    onClick={() => {
+                      setInput(ex.text);
+                    }}
+                  >
+                    <h3>{ex.title}</h3>
+                    <p>{ex.text}</p>
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: "4px 4px 0", fontSize: 12 }}>
+                点击卡片预填输入框，再发送。
+                {USE_MOCK
+                  ? " 顶栏若写着「示意 Mock」，看到的是本地假数据，不是真实急症/用量。"
+                  : " 顶栏应为「真实 SSE」；请先启动后端 :8000。"}
+              </p>
             </>
           ) : null}
 

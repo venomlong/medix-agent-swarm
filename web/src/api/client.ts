@@ -9,6 +9,7 @@ import type {
   AnswerUsage,
   ChatMessage,
   FixRecord,
+  GuardrailInfo,
   KnowledgeDoc,
   DeleteSessionResult,
   MemorySession,
@@ -113,6 +114,10 @@ function eventLabel(name: string, data: Record<string, unknown>): string {
     const cat = String(data.category ?? "");
     return cat ? `emergency_triggered · ${cat}` : "emergency_triggered";
   }
+  if (name === "guardrail_triggered") {
+    const action = String(data.action ?? "");
+    return action ? `guardrail_triggered · ${action}` : "guardrail_triggered";
+  }
   return name;
 }
 
@@ -121,8 +126,23 @@ function parseRoutingMode(mode: unknown): Exclude<RoutingMode, "idle" | "pending
   return "swarm";
 }
 
-function extractAlert(body: string): Pick<AnswerPayload, "alert" | "alertNote"> {
-  if (/重要提醒|立即就医|拨打急救|急诊/.test(body)) {
+function asNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.trim();
+  return text || undefined;
+}
+
+function extractAlert(
+  body: string,
+  emergency: boolean
+): Pick<AnswerPayload, "alert" | "alertNote"> {
+  if (emergency) {
+    return {
+      alert: "检测到疑似急症，系统已跳过常规分析流程，请优先执行急救指引。",
+      alertNote: "急症分诊已短路常规 Swarm",
+    };
+  }
+  if (/重要提醒|立即就医|拨打急救|拨打\s*120|急救电话|急症提醒|急诊/.test(body)) {
     const m = body.match(/重要提醒[：:]\s*([^\n]+)/);
     return {
       alert: m ? `重要提醒：${m[1].trim()}` : "重要提醒：如症状加重或出现胸痛、言语不清等，请立即就医。",
@@ -169,15 +189,39 @@ function toTraceId(data: Record<string, unknown>): string | undefined {
   return id || undefined;
 }
 
+function toGuardrail(raw: unknown): GuardrailInfo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const g = raw as Record<string, unknown>;
+  const triggered = Boolean(g.triggered ?? g.rewritten);
+  if (!triggered) return undefined;
+  const violations = Array.isArray(g.violations)
+    ? g.violations
+        .filter((v): v is Record<string, unknown> => !!v && typeof v === "object")
+        .map((v) => ({
+          type: asNonEmptyString(v.type),
+          evidence: asNonEmptyString(v.evidence),
+        }))
+    : [];
+  return {
+    triggered: true,
+    rewritten: Boolean(g.rewritten),
+    action: asNonEmptyString(g.action),
+    violations,
+  };
+}
+
 function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
   const body = String(data.body ?? data.answer ?? "");
-  const heuristic = extractAlert(body);
+  const emergency = Boolean(data.emergency);
+  const alertFromData = asNonEmptyString(data.alert);
+  const heuristic = extractAlert(body, emergency && !alertFromData);
   const suggestions = Array.isArray(data.suggestions)
     ? data.suggestions.map((s) => String(s))
     : [];
   const sources = Array.isArray(data.sources)
     ? data.sources.map(toSourceRef).filter((s): s is SourceRef => s != null)
     : [];
+  const usage = toUsage(data.usage);
   return {
     body,
     suggestions,
@@ -186,11 +230,12 @@ function toAnswerPayload(data: Record<string, unknown>): AnswerPayload {
     elapsed: String(data.elapsed ?? "—"),
     agentCount: Number(data.agent_count ?? data.agentCount ?? 1) || 1,
     timedOut: Boolean(data.timed_out ?? data.timedOut),
-    alert: (data.alert as string | undefined) ?? heuristic.alert,
-    alertNote: (data.alert_note as string | undefined) ?? heuristic.alertNote,
-    emergency: Boolean(data.emergency),
-    usage: toUsage(data.usage),
+    alert: alertFromData ?? heuristic.alert,
+    alertNote: asNonEmptyString(data.alert_note ?? data.alertNote) ?? heuristic.alertNote,
+    emergency,
+    usage,
     traceId: toTraceId(data),
+    guardrail: toGuardrail(data.guardrail),
   };
 }
 
@@ -278,6 +323,7 @@ export function sendChat(message: string, sessionId: string, h: ChatHandlers): (
     let answered = false;
     let streamed = false;
     let streamedText = "";
+    let routingMode: Exclude<RoutingMode, "idle" | "pending"> | null = null;
 
     const fail = async (text: string) => {
       pushEvent(h, "error", { message: text });
@@ -337,6 +383,7 @@ export function sendChat(message: string, sessionId: string, h: ChatHandlers): (
 
         if (event === "routing") {
           const mode = parseRoutingMode(data.mode);
+          routingMode = mode;
           const count = Number(data.subtask_count ?? 0);
           h.onRouting(mode, count);
           if (steps.length === 0) {
@@ -368,6 +415,7 @@ export function sendChat(message: string, sessionId: string, h: ChatHandlers): (
               disclaimer: "",
               elapsed: "—",
               agentCount: Number(data.agent_count ?? 1) || 1,
+              emergency: routingMode === "emergency",
             });
             pushEvent(h, "answer_delta", { message: "开始流出" });
           }

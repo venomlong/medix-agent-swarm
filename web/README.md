@@ -49,10 +49,10 @@ $env:VITE_USE_MOCK="true"; npm run dev
 
 | 路径 | 页面 |
 |------|------|
-| `/` | 对话工作台（真实 `POST /api/chat` SSE；可用 mock 回退） |
-| `/dashboard` | 仪表盘（mock） |
-| `/memory` | 会话记忆（mock） |
-| `/knowledge` | 知识库（mock） |
-| `/safety` | 安全质量（mock） |
+| `/` | 对话工作台（默认真实 `POST /api/chat` SSE；`VITE_USE_MOCK=true` 回退示意数据，顶栏会标明） |
+| `/dashboard` | 仪表盘（真实 `/api/stats`：会话、Token、成本；mock 时为示意） |
+| `/memory` | 会话记忆（真实 `/api/sessions`） |
+| `/knowledge` | 知识库（真实 `/api/kb/search`） |
+| `/safety` | 安全质量（真实 `/api/safety/fixes`） |
 
 本目录不要提交 `node_modules/` 与 `dist/`。

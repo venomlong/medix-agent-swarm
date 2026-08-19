@@ -37,6 +37,13 @@ export interface AnswerUsage {
   llmCalls: number;
 }
 
+export interface GuardrailInfo {
+  triggered: boolean;
+  rewritten?: boolean;
+  action?: string;
+  violations?: { type?: string; evidence?: string }[];
+}
+
 export interface AnswerPayload {
   body: string;
   alert?: string;
@@ -50,6 +57,7 @@ export interface AnswerPayload {
   emergency?: boolean;
   usage?: AnswerUsage;
   traceId?: string;
+  guardrail?: GuardrailInfo;
 }
 
 export interface ChatMessage {
