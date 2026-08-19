@@ -44,3 +44,7 @@ httpx>=0.24.0
 fastapi>=0.115.0,<0.117.0
 uvicorn[standard]>=0.32.0,<0.35.0
 python-multipart>=0.0.20
+
+# 测试（mock LLM 单测，不打真实 API）
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
