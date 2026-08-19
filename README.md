@@ -21,13 +21,13 @@ https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 - **💾 Milvus 知识库**: 统一知识管理，语义检索，支持模糊查询（"血压高" → "高血压"）✅
 - **⚡ Claude Code Skills**: 9个预定义技能（7个原子 + 2个记忆），一键调用医疗助手 ✅
 - **🏗️ Harness Engineering**: 约束驱动 + 熵管理，系统自动验证和优化，保证安全、简洁、高质量 ✅
-- **🛡️ 医疗安全纵深**: 输入侧急症 fail-fast、输出护栏、RAG 来源卡片、日志 PII 脱敏 ✅
+- **🛡️ 医疗安全纵深**: 输入侧急症 fail-fast、有害内容拦截、输出护栏、RAG 来源卡片、日志 PII 脱敏 ✅
 - **📡 可观测性**: 请求级 `trace_id` / span / token 成本，`GET /api/traces/{session_id}` 可回溯 ✅
 - **📊 量化评测**: 安全红线 / 路由 / RAG 三套 golden set，数字可复现（见[评测结果](#-评测结果)） ✅
 
 ## 🛡️ 医疗安全设计
 
-医疗助手和普通 chatbot 的差别在于：**漏报急症有后果，确定性诊断/剂量指令不能出口**。本项目把安全做成纵深，而不是只在答案末尾拼一段免责声明。
+医疗助手和普通 chatbot 的差别在于：**漏报急症有后果，确定性诊断/剂量指令不能出口，越狱/违法请求也不能进 Swarm**。本项目把安全做成纵深，而不是只在答案末尾拼一段免责声明。
 
 ```
 用户输入
@@ -36,7 +36,10 @@ https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 [输入] EmergencyTriage  ──急症命中──► 秒级急救指引（跳过 Swarm）
    │ 未命中
    ▼
-[过程] 约束白名单 + Agent Loop + RAG 来源收集
+[输入] HarmfulContentFilter ──有害命中──► 拒绝模板（mode=blocked）
+   │ 未命中
+   ▼
+[过程] Lead 分解 → 单 Agent / Swarm + 约束白名单 + RAG 来源收集
    │
    ▼
 [输出] OutputGuardrail ──违规──► 规则检出 → LLM 改写 / 正则兜底
@@ -48,11 +51,14 @@ https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 | 层 | 解决什么 | 怎么做 | 怎么验证 |
 |----|----------|--------|----------|
 | **输入分诊** | 胸痛冒冷汗若走完整 Swarm，演示里要等约 60s，急症场景不可接受 | `safety/triage.py`：强规则 + 组合规则毫秒判定；边缘词才交给 LLM。命中后 `SwarmCoordinator` 短路，SSE 发 `emergency_triggered`，前端红色横幅 | 规则层评测 35 条：急症召回 100%，漏报 0，误伤率 0%（见下表） |
+| **有害拦截** | 越狱、制毒、诈骗等请求若进入 Lead/Swarm，既浪费 token 也可能被模型接住 | `safety/harm_filter.py`：意图短语 + 制作类正则先拦；炸弹/冰毒等边缘词才 LLM 二分类。自杀仍走急症求助，不拒绝。医疗豁免（如「冰毒中毒表现」）放行 | `tests/test_harm_filter.py`；前端 `routing.mode=blocked` |
 | **过程约束** | Agent 不能越权调工具；知识库答案必须可核对 | YAML 约束 + `AutoFixer` 补免责/就医提醒；Milvus hit 经 `core/source_collector.py` 收集，前端展示文档名 / 相关度 / 原文片段 | `tests/test_source_collector.py`；答案卡「参考来源」 |
-| **输出护栏** | 「你得的是心肌炎」「每次 100mg」这类深层违规，字符串拼接发现不了 | `validation/guardrail.py`：规则层常开；仅违规时 LLM 重写，再失败则正则保守替换。急症短路路径不过护栏，避免拖慢 fail-fast | `tests/test_guardrail.py`；`/api/safety/fixes` 读 JSONL（重启仍在） |
+| **输出护栏** | 「你得的是心肌炎」「每次 100mg」这类深层违规，字符串拼接发现不了 | `validation/guardrail.py`：规则层常开；仅违规时 LLM 重写，再失败则正则保守替换。急症/拦截短路路径不过护栏，避免拖慢 fail-fast | `tests/test_guardrail.py`；`/api/safety/fixes` 读 JSONL（重启仍在） |
 | **日志脱敏** | 对话里可能出现手机号/身份证/邮箱 | `core/log_privacy.py` 的 `mask_pii` 挂到 loguru patcher；traces / safety_log 落盘前同样掩码 | `tests/test_log_privacy.py` |
 
-阴性对照同样重要：`"感冒了怎么办"` 必须走原流程，不能被分诊误伤。这是评测集里 10 条阴性用例存在的原因。
+阴性对照同样重要：`"感冒了怎么办"` 必须走原流程，不能被分诊或有害拦截误伤。急症评测集里 10 条阴性用例就是为此准备的。
+
+**路由怎么分单 Agent / Swarm**（过完输入关之后）：LeadAgent 只输出 `subtasks[].assigned_agent`（`consultation_agent` / `diagnostic_agent` / `research_agent`），Coordinator 按条数分流——`len==1` 直调该 Agent，`len>=2` 才进 Swarm 并行。Lead 不指定 Skill，Worker 按人设自己选工具。
 
 ## 📡 可观测性
 
@@ -61,7 +67,7 @@ https://github.com/user-attachments/assets/c547b054-ba1a-486a-a61e-9d1e3f43abe9
 **一次请求能回答的问题**
 
 - 用了多少 token、估算多少钱（`answer_done.usage`：`total_tokens` / `cost` / `llm_calls`）
-- 每步耗时：`triage` / `decompose` / `llm_call` / `skill:*` / `guardrail` 等 span
+- 每步耗时：`triage` / `harm_filter` / `decompose` / `llm_call` / `skill:*` / `guardrail` 等 span
 - 日志行带 `trace_id` 短标识，可按请求过滤
 
 **查询与落盘**
@@ -91,7 +97,7 @@ Trace 结构示例（字段与 `core/tracing.py` 的 `Trace.to_dict()` 一致；
 }
 ```
 
-急症短路路径同样打 trace，通常只有一条 `triage` span——用来对比「秒级短路 vs 完整 Swarm」，而不是把急症请求变成黑盒。SSE 协议与查询接口说明见 [`docs/frontend-backend-integration.md`](docs/frontend-backend-integration.md)。
+急症短路路径同样打 trace，通常只有一条 `triage` span；有害拦截为 `triage` + `harm_filter`——用来对比「秒级短路 vs 完整 Swarm」，而不是把这类请求变成黑盒。SSE 协议与查询接口说明见 [`docs/frontend-backend-integration.md`](docs/frontend-backend-integration.md)。
 
 ## 📊 评测结果
 
@@ -105,7 +111,7 @@ Trace 结构示例（字段与 `core/tracing.py` 的 `Trace.to_dict()` 一致；
 
 **路由数字免责声明**：`87.5%` 来自 `evals/run_routing_eval.py --offline`，按 LeadAgent 提示词策略做规则分解，**不调用 LLM**。正式路由准确率需去掉 `--offline` 跑真实分解（依赖仓库外 `../config.py` 的 API，密钥不要写入本仓库）。离线失败形态是 5 条指南类 `partial`（例如指南题被启发式拆成 Swarm），详见报告。
 
-**单元测试**：`python -m unittest discover -s tests`，**123** 项通过（mock LLM，不打付费 API）。
+**单元测试**：`python -m unittest discover -s tests`，**145** 项通过（mock LLM，不打付费 API）。
 
 ### 复现（Windows PowerShell）
 
@@ -310,7 +316,12 @@ medix-agent-swarm/
 │   ├── events.py                      # 事件驱动通信
 │   ├── lead_agent.py                  # 任务分解和汇总
 │   ├── shared_context.py              # 共享环境（信息素）
-│   └── swarm_coordinator.py           # 智能路由
+│   └── swarm_coordinator.py           # 智能路由（急症/有害短路 + 单 Agent / Swarm）
+│
+├── safety/                            # 输入侧安全
+│   ├── __init__.py
+│   ├── triage.py                      # 急症分诊（规则 + 边缘 LLM）
+│   └── harm_filter.py                 # 有害内容拦截（规则 + 边缘 LLM）
 │
 ├── memory/                            # 记忆管理（集成熵管理）
 │   ├── __init__.py
@@ -330,7 +341,9 @@ medix-agent-swarm/
 │
 ├── validation/                        # 输出验证和修复（Harness）
 │   ├── __init__.py
-│   └── auto_fixer.py                  # 自动修复器
+│   ├── auto_fixer.py                  # 自动修复器
+│   ├── guardrail.py                   # 输出护栏（规则 + 违规时 LLM 重写）
+│   └── safety_log.py                  # 安全记录 JSONL
 │
 ├── knowledge/                         # Milvus 知识库
 │   ├── __init__.py
@@ -404,8 +417,8 @@ medix-agent-swarm/
 
 ### 2个协调 Agent
 
-- **LeadAgent**: 任务分解和结果汇总（非编排器）
-- **SwarmCoordinator**: 智能路由（简单问题→单Agent，复杂问题→Swarm）
+- **LeadAgent**: 任务分解和结果汇总（非编排器）。只决定「几个 Worker、各自干什么」，不指定 Skill
+- **SwarmCoordinator**: 智能路由。先急症/有害短路；其余按 Lead 子任务条数：1→单 Agent，≥2→Swarm 并行（Worker 按 `assigned_agent` 领取）
 
 ### Skills 架构特点
 
@@ -760,22 +773,18 @@ python examples/test_all.py
 ```
 用户问题
    ↓
-【原子查询】→ 直接调用 Skills → Milvus/业务逻辑
-   │                ↓
-   │         OpenAI Format
-   │
-   └─【复杂问题】
+EmergencyTriage / HarmfulContentFilter（输入短路）
+   ↓ 未命中
+LeadAgent 分解 → 按子任务条数路由
+   ├─ 1 条 → 单 Agent 直调
+   └─ ≥2 条 → Swarm
           ↓
-   SwarmCoordinator（智能路由）
-          ↓
-     LeadAgent（分解任务）
-          ↓
-    发布到 SharedContext（共享环境）
+    发布到 SharedContext（指定 assigned_agent）
           ↓
     ┌─────┴─────┬────────┐
     ↓           ↓        ↓
 ConsultAgent DiagAgent ResearchAgent
-（SkillRegistry）（直达 LLM）（并行执行）
+（咨询）（风险评估）（指南研究）
     │           │        │
     └───────────┴────────┘
           ↓
@@ -796,10 +805,10 @@ ConsultAgent DiagAgent ResearchAgent
 **关键特性**：去中心化、自组织、涌现智能
 
 **工作流程**：
-1. 简单问题 → 单 Agent（快速响应）
-2. 复杂问题 → LeadAgent 分解任务
-3. Worker Agents 自主认领（基于能力匹配）
-4. 并行执行（每个 Agent 自主选择 Skills）
+1. 急症 / 有害输入 → 短路返回（不进 Swarm）
+2. LeadAgent 分解任务并指定 `assigned_agent`
+3. 1 个子任务 → 单 Agent；≥2 个 → Swarm 并行
+4. Worker 按自己的 ID 领取任务，并自主选择 Skills
 5. LeadAgent 汇总结果
 6. SessionSummary 学习总结
 
