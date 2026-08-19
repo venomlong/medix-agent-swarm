@@ -29,6 +29,7 @@ from .bridge import (
 )
 from .reads import (
     delete_session_data,
+    get_knowledge_chunk,
     get_session_detail,
     get_short_term_messages,
     list_session_rows,
@@ -389,6 +390,25 @@ async def kb_search(
             "error": str(exc)[:180],
         }
     return {"hits": hits, "query": query, "source": "milvus", "count": len(hits)}
+
+
+@app.get("/api/kb/chunks/{chunk_id}")
+async def kb_chunk_detail(chunk_id: str, request: Request) -> Dict[str, Any]:
+    sid = (chunk_id or "").strip()
+    if not sid:
+        return {"id": sid, "error": "not_found", "content": ""}
+    runner: CoordinatorRunner = request.app.state.runner
+    try:
+        if runner.coordinator is not None:
+            detail = await _run_worker_sync(runner, get_knowledge_chunk, sid)
+        else:
+            detail = await asyncio.to_thread(get_knowledge_chunk, sid)
+    except Exception as exc:
+        logger.exception("kb chunk detail failed")
+        return {"id": sid, "error": str(exc)[:180], "content": ""}
+    if detail is None:
+        return {"id": sid, "error": "not_found", "content": ""}
+    return detail
 
 
 @app.get("/api/safety/fixes")

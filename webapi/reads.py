@@ -222,6 +222,35 @@ def search_mem0_similar(coordinator: Any, query: str, limit: int = 5) -> List[Di
     return cases
 
 
+def _kb_hit_to_doc(hit: Dict[str, Any], score: Optional[float] = None) -> Dict[str, Any]:
+    meta = hit.get("metadata") or {}
+    if not isinstance(meta, dict):
+        meta = {}
+    kb_type = str(meta.get("type") or "")
+    ui_type, type_label = KB_TYPE_TO_UI.get(kb_type, (kb_type or "lifestyle", kb_type or "其他"))
+    filename = str(meta.get("filename") or "").strip()
+    title = (
+        str(meta.get("disease") or "").replace("_", " ").strip()
+        or filename.replace(".txt", "")
+        or f"文档 {hit.get('id')}"
+    )
+    content = str(hit.get("content") or "")
+    preview = content.replace("\n", " ").strip()
+    source = filename.replace(".txt", "") or title
+    resolved_score = score if score is not None else hit.get("score")
+    return {
+        "id": str(hit.get("id")),
+        "title": title[:80],
+        "type": ui_type,
+        "typeLabel": type_label,
+        "source": source,
+        "filename": filename,
+        "snippet": preview[:180] + ("…" if len(preview) > 180 else ""),
+        "content": content,
+        "score": float(resolved_score or 0.0),
+    }
+
+
 def search_knowledge(query: str, doc_type: Optional[str], top_k: int = 8) -> List[Dict[str, Any]]:
     from knowledge.milvus_kb import MedicalKnowledgeBase
 
@@ -230,25 +259,19 @@ def search_knowledge(query: str, doc_type: Optional[str], top_k: int = 8) -> Lis
     if filter_type in ("all", "", None):
         filter_type = None
     hits = kb.search(query=query, top_k=top_k, filter_type=filter_type)
-    docs: List[Dict[str, Any]] = []
-    for hit in hits:
-        meta = hit.get("metadata") or {}
-        kb_type = str(meta.get("type") or "")
-        ui_type, type_label = KB_TYPE_TO_UI.get(kb_type, (kb_type or "lifestyle", kb_type or "其他"))
-        title = (
-            str(meta.get("disease") or "").replace("_", " ").strip()
-            or str(meta.get("filename") or "").replace(".txt", "")
-            or f"文档 {hit.get('id')}"
-        )
-        content = str(hit.get("content") or "").replace("\n", " ").strip()
-        docs.append(
-            {
-                "id": str(hit.get("id")),
-                "title": title[:80],
-                "type": ui_type,
-                "typeLabel": type_label,
-                "snippet": content[:180] + ("…" if len(content) > 180 else ""),
-                "score": float(hit.get("score") or 0.0),
-            }
-        )
-    return docs
+    return [_kb_hit_to_doc(hit) for hit in hits]
+
+
+def get_knowledge_chunk(chunk_id: str) -> Optional[Dict[str, Any]]:
+    from knowledge.milvus_kb import MedicalKnowledgeBase
+
+    sid = (chunk_id or "").strip()
+    if not sid:
+        return None
+    kb = MedicalKnowledgeBase()
+    hit = kb.get(sid)
+    if not hit:
+        return None
+    doc = _kb_hit_to_doc(hit)
+    doc.pop("score", None)
+    return doc

@@ -505,6 +505,10 @@ export function searchKnowledge(q: string, type?: string) {
   );
 }
 
+export function getKnowledgeChunk(id: string) {
+  return fetchJson<KnowledgeDoc>(`/api/kb/chunks/${encodeURIComponent(id)}`);
+}
+
 export function getSafetyFixes() {
   return fetchJson<{
     records: FixRecord[];

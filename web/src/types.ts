@@ -68,6 +68,10 @@ export interface KnowledgeDoc {
   typeLabel: string;
   snippet: string;
   score: number;
+  content?: string;
+  source?: string;
+  filename?: string;
+  error?: string;
 }
 
 export interface MemorySession {

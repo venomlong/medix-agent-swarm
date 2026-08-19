@@ -251,6 +251,52 @@ class MedicalKnowledgeBase:
         logger.debug(f"Found {len(documents)} documents")
         return documents
 
+    def get(self, chunk_id: Any) -> Optional[Dict[str, Any]]:
+        """按 Milvus 主键读取单个 chunk 全文。"""
+        try:
+            pk: Any = int(str(chunk_id).strip())
+        except (TypeError, ValueError):
+            pk = chunk_id
+
+        def _fetch() -> List[Dict[str, Any]]:
+            return self.milvus_client.get(
+                collection_name=self.collection_name,
+                ids=[pk],
+                output_fields=["content", "metadata"],
+            )
+
+        try:
+            rows = _fetch()
+        except Exception as e:
+            if "released" in str(e).lower() or "not loaded" in str(e).lower():
+                try:
+                    logger.warning(f"Collection released, reloading: {e}")
+                    self.milvus_client.load_collection(self.collection_name)
+                    rows = _fetch()
+                except Exception as retry_e:
+                    logger.error(f"Get chunk failed after reload retry: {retry_e}")
+                    return None
+            else:
+                logger.error(f"Get chunk failed: {e}")
+                return None
+
+        if not rows:
+            return None
+        row = rows[0] if isinstance(rows, list) else rows
+        entity = row.get("entity") if isinstance(row.get("entity"), dict) else row
+        content = entity.get("content") or row.get("content") or ""
+        meta_raw = entity.get("metadata") if "metadata" in entity else row.get("metadata")
+        try:
+            metadata = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        return {
+            "id": row.get("id", pk),
+            "content": content,
+            "metadata": metadata if isinstance(metadata, dict) else {},
+            "score": 0.0,
+        }
+
     def delete_collection(self):
         """删除 collection（用于测试）"""
         if self.milvus_client.has_collection(self.collection_name):
