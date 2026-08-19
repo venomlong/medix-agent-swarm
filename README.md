@@ -2,6 +2,12 @@
 
 基于 Skills-Agent 两层架构的多智能体协作医疗助手系统，融合 Agent Loop、Agent Swarm、记忆管理和 Milvus 知识库。
 
+### 界面演示
+
+<video src="https://github.com/venomlong/medix-agent-swarm/raw/main/docs/web-ui-demo.mp4" controls width="100%"></video>
+
+[▶ 观看 Web 工作台演示视频](docs/web-ui-demo.mp4)
+
 ## 📋 项目概述
 
 本项目采用创新的 **Skills-Agent 两层架构**，通过9个 Skills（7个原子 + 2个记忆）和3个专业 Agent 协同工作，提供智能、专业的医疗服务。
@@ -722,6 +728,8 @@ MIT License
 ## 可视化界面
 
 Web 工作台（Vite + React），对接 `webapi` 的 SSE 对话与协作过程可视化。设计方案见 [`docs/ui-design-proposal.html`](docs/ui-design-proposal.html)。
+
+演示视频：[▶ 观看 Web 工作台演示](docs/web-ui-demo.mp4)
 
 ```bash
 # 终端 1：后端
