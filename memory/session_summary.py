@@ -14,29 +14,50 @@ SessionSummary：会话总结和经验提取
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import json
 import re
 from loguru import logger
 
-
-def _section(text: str, heading: str) -> str:
-    pattern = rf"^## {re.escape(heading)}\s*\n(.*?)(?=^## |\Z)"
-    m = re.search(pattern, text, flags=re.M | re.S)
-    return (m.group(1).strip() if m else "").strip()
+# 只按 SessionSummary 自身的 ## 标题分节。答案里的 ---、表格分隔行 | --- |、
+# 以及模型输出的其它 ## 标题都不能当 section 边界，否则会吃掉表体。
+KNOWN_SECTION_HEADINGS: Tuple[str, ...] = (
+    "问题",
+    "背景",
+    "参与 Agent",
+    "协作过程",
+    "关键发现",
+    "最终答案",
+    "经验教训",
+    "性能指标",
+)
+_HEADING_RE = re.compile(
+    r"^## (" + "|".join(re.escape(h) for h in KNOWN_SECTION_HEADINGS) + r")\s*$"
+)
 
 
 def _extract_summary_sections(text: str) -> Dict[str, str]:
-    """按 ## 标题拆出全文段落，不截断。仅用于读取，不改生成逻辑。"""
+    """按已知 ## 标题拆出全文段落，不截断，不把 HR / 表格线当边界。"""
     sections: Dict[str, str] = {}
-    parts = re.split(r"^## ", text, flags=re.M)
-    for part in parts[1:]:
-        heading, _, body = part.partition("\n")
-        heading = heading.strip()
-        body = body.strip()
-        if heading:
-            sections[heading] = body
+    current: Optional[str] = None
+    buf: List[str] = []
+    for line in (text or "").splitlines(keepends=True):
+        m = _HEADING_RE.match(line.rstrip("\r\n"))
+        if m:
+            if current is not None:
+                sections[current] = "".join(buf).strip()
+            current = m.group(1)
+            buf = []
+            continue
+        if current is not None:
+            buf.append(line)
+    if current is not None:
+        sections[current] = "".join(buf).strip()
     return sections
+
+
+def _section(text: str, heading: str) -> str:
+    return _extract_summary_sections(text).get(heading, "")
 
 
 def _parse_summary_markdown(session_id: str, text: str, mtime: float) -> Dict[str, Any]:
@@ -309,6 +330,53 @@ class SessionSummary:
             key_findings=key_findings,
             lessons_learned=[],  # TODO: 从协作过程中提取
             performance=performance
+        )
+
+    @classmethod
+    def from_single_agent(
+        cls,
+        session_id: str,
+        question: str,
+        final_answer: str,
+        agent_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        tool_calls: int = 0,
+        mode: str = "single_agent",
+    ) -> "SessionSummary":
+        """单 Agent / 降级路径也落一份完整 markdown，供记忆抽屉读取。"""
+        total_time = (end_time - start_time).total_seconds()
+        aid = (agent_id or "consultation_agent").strip() or "consultation_agent"
+        return cls(
+            session_id=session_id,
+            question=question,
+            context={},
+            timestamp=start_time,
+            agents_participated=[
+                AgentParticipation(
+                    agent_id=aid,
+                    role="worker",
+                    subtasks_handled=["single"],
+                    tool_calls=tool_calls,
+                    execution_time=total_time,
+                )
+            ],
+            subtasks_created=1,
+            subtasks_completed=1,
+            events_count=0,
+            final_answer=final_answer or "",
+            key_findings=[],
+            lessons_learned=[],
+            performance=PerformanceMetrics(
+                total_time=total_time,
+                agent_count=1,
+                parallel_efficiency=1.0,
+                information_coverage=1.0,
+                redundancy=0.0,
+                speedup_vs_single=1.0,
+            ),
+            swarm_enabled=False,
+            metadata={"mode": mode},
         )
 
 

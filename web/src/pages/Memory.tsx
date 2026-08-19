@@ -3,17 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { deleteSession, getSessionDetail, getSessions, getSimilarCases, USE_MOCK } from "../api/client";
 import { MEMORY_SESSIONS, SIMILAR_CASES } from "../mock/data";
 import type { MemorySession, MemorySessionDetail, SimilarCase } from "../types";
+import {
+  KNOWN_SECTION_HEADINGS,
+  MarkdownBody,
+  answerLooksCutAtTable,
+  parseMarkdownSections,
+} from "../lib/sessionMarkdown";
 
-const SECTION_ORDER = [
-  "问题",
-  "最终答案",
-  "参与 Agent",
-  "协作过程",
-  "关键发现",
-  "经验教训",
-  "性能指标",
-  "背景",
-];
+const SECTION_ORDER = [...KNOWN_SECTION_HEADINGS];
 
 const SECTION_TITLE: Record<string, string> = {
   最终答案: "最终回答",
@@ -33,18 +30,6 @@ function agentsLabel(s: MemorySession): string {
   return s.mode === "Swarm" ? "多个" : "1 个";
 }
 
-function parseMarkdownSections(md: string): Record<string, string> {
-  const sections: Record<string, string> = {};
-  const parts = md.split(/^## /m);
-  for (const part of parts.slice(1)) {
-    const nl = part.indexOf("\n");
-    const heading = (nl === -1 ? part : part.slice(0, nl)).trim();
-    const body = (nl === -1 ? "" : part.slice(nl + 1)).trim();
-    if (heading) sections[heading] = body;
-  }
-  return sections;
-}
-
 function sectionsFromDetail(d: MemorySessionDetail): { key: string; title: string; body: string }[] {
   const map: Record<string, string> = { ...(d.sections || {}) };
   if (d.markdown) {
@@ -57,8 +42,10 @@ function sectionsFromDetail(d: MemorySessionDetail): { key: string; title: strin
   if (!map["问题"] && (d.question_full || d.question)) {
     map["问题"] = (d.question_full || d.question).trim();
   }
-  if (!map["最终答案"] && d.final_answer) {
-    map["最终答案"] = d.final_answer.trim();
+  if (d.final_answer) {
+    const fa = d.final_answer.trim();
+    const cur = (map["最终答案"] || "").trim();
+    if (!cur || fa.length > cur.length) map["最终答案"] = fa;
   }
   if (!map["最终答案"] && !d.markdown && d.summary) {
     map["最终答案"] = d.summary.trim();
@@ -80,9 +67,15 @@ function sectionsFromDetail(d: MemorySessionDetail): { key: string; title: strin
 }
 
 function parseLooksIncomplete(
-  sections: { body: string }[],
-  markdown: string
+  sections: { key: string; body: string }[],
+  markdown: string,
+  finalAnswer = ""
 ): boolean {
+  const answerSec = sections.find((s) => s.key === "最终答案");
+  if (answerSec && answerLooksCutAtTable(answerSec.body)) {
+    const full = (finalAnswer || markdown || "").trim();
+    if (full.length > answerSec.body.trim().length) return true;
+  }
   const md = markdown.trim();
   if (!md) return false;
   if (!sections.length) return true;
@@ -242,8 +235,12 @@ export function Memory() {
 
   const drawerSections = detail ? sectionsFromDetail(detail) : [];
   const markdown = (detail?.markdown || "").trim();
-  const parseIncomplete = detail ? parseLooksIncomplete(drawerSections, markdown) : false;
-  const showMarkdown = Boolean(markdown) && (showRaw || parseIncomplete);
+  const finalAnswer = (detail?.final_answer || "").trim();
+  const parseIncomplete = detail
+    ? parseLooksIncomplete(drawerSections, markdown, finalAnswer)
+    : false;
+  const fallbackText = markdown || finalAnswer;
+  const showMarkdown = Boolean(fallbackText) && (showRaw || parseIncomplete);
 
   return (
     <main className="page">
@@ -254,12 +251,12 @@ export function Memory() {
       <p className="page-lede">
         {mock
           ? "历史会话回看、短期记忆上下文，以及 Mem0 长期记忆中的相似案例。点击一条可在右侧查看完整摘要。"
-          : "列表来自本地 SessionSummary markdown（Swarm 会话会落盘）。点击一条可在右侧查看完整摘要；「打开对话」会跳到工作台并加载该会话的短期记忆。相似案例走 Mem0。"}
+          : "列表来自本地 SessionSummary markdown（单 Agent 与 Swarm 都会落盘）。点击一条可在右侧查看完整摘要；「打开对话」会跳到工作台并加载该会话的短期记忆。相似案例走 Mem0。"}
       </p>
       {error ? <div className="card empty-hint">{error}</div> : null}
 
       {sessions.length === 0 && !error ? (
-        <div className="card empty-hint">还没有会话摘要。先在工作台完成一次 Swarm 咨询。</div>
+        <div className="card empty-hint">还没有会话摘要。先在工作台完成一次咨询。</div>
       ) : (
         <div className="card mem-list">
           {sessions.map((s) => (
@@ -366,14 +363,16 @@ export function Memory() {
             <div className="session-drawer-body">
               {detailLoading ? <p className="muted">正在加载完整摘要…</p> : null}
               {detailError ? <p className="drawer-error">{detailError}</p> : null}
-              {!detailLoading && !markdown && drawerSections.length === 0 ? (
-                <p className="muted">这条会话还没有完整 SessionSummary 文件，仅有列表摘要。</p>
+              {!detailLoading && !markdown && !finalAnswer && drawerSections.length === 0 ? (
+                <p className="muted">这条会话还没有完整摘要，仅有列表预览。</p>
               ) : null}
               {!detailLoading && !parseIncomplete
                 ? drawerSections.map((sec) => (
                     <section className="session-section" key={sec.key}>
                       <h3>{sec.title}</h3>
-                      <div className="session-section-body">{sec.body}</div>
+                      <div className="session-section-body">
+                        <MarkdownBody text={sec.body} />
+                      </div>
                     </section>
                   ))
                 : null}
@@ -389,7 +388,9 @@ export function Memory() {
               {!detailLoading && showMarkdown ? (
                 <section className="session-section">
                   <h3>{parseIncomplete ? "完整摘要" : "原始 Markdown"}</h3>
-                  <div className="session-section-body">{markdown}</div>
+                  <div className="session-section-body">
+                    <MarkdownBody text={fallbackText} />
+                  </div>
                 </section>
               ) : null}
             </div>

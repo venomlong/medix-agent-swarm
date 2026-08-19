@@ -333,13 +333,28 @@ async def delete_session(session_id: str, request: Request) -> Dict[str, Any]:
 
 
 @app.get("/api/sessions/{session_id}")
-async def session_detail(session_id: str) -> Dict[str, Any]:
-    detail = await asyncio.to_thread(get_session_detail, session_id)
+async def session_detail(session_id: str, request: Request) -> Dict[str, Any]:
+    runner: CoordinatorRunner = request.app.state.runner
+    sid = (session_id or "").strip()
+    if runner.coordinator is not None:
+        detail = await _run_worker_sync(
+            runner, get_session_detail, sid, runner.coordinator
+        )
+    else:
+        detail = await asyncio.to_thread(get_session_detail, sid)
     if detail is None:
         for item in STATS.recent_sessions():
-            if item.get("id") == session_id:
+            if item.get("id") == sid:
                 return {**item, "markdown": None, "source": "process"}
-        return {"id": session_id, "error": "not_found", "markdown": None}
+        return {"id": sid, "error": "not_found", "markdown": None}
+    for item in STATS.recent_sessions():
+        if item.get("id") != sid:
+            continue
+        for key in ("time", "mode", "elapsed", "elapsed_s", "agent_count"):
+            cur = detail.get(key)
+            if item.get(key) not in (None, "", "—") and cur in (None, "", "—"):
+                detail[key] = item[key]
+        break
     return detail
 
 

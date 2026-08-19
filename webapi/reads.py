@@ -1,6 +1,7 @@
 """只读适配：SessionSummary 文件、Mem0、Milvus。不编造持久库。"""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -108,13 +109,75 @@ def delete_session_data(session_id: str, coordinator: Any = None) -> Dict[str, A
     return payload
 
 
-def get_session_detail(session_id: str) -> Optional[Dict[str, Any]]:
+def _last_user_and_assistant(messages: List[Dict[str, Any]]):
+    last_user = ""
+    last_assistant = ""
+    for msg in messages or []:
+        role = str(msg.get("role") or "")
+        content = str(msg.get("content") or "")
+        if role == "user" and content.strip():
+            last_user = content
+        elif role == "assistant" and content.strip():
+            last_assistant = content
+    return last_user, last_assistant
+
+
+def _markdown_from_turn(session_id: str, question: str, answer: str, time_label: str = "") -> str:
+    lines = [f"# Session Summary: {session_id}", ""]
+    if time_label:
+        lines.extend([f"**时间**: {time_label}", ""])
+    lines.extend(
+        [
+            "## 问题",
+            question or session_id,
+            "",
+            "## 最终答案",
+            "",
+            answer or "",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _detail_from_short_term(session_id: str, coordinator: Any = None) -> Optional[Dict[str, Any]]:
+    """单 Agent 可能没有 SessionSummary 文件：用短期记忆最后一条 assistant 作为完整最终回答。"""
+    payload = get_short_term_messages(session_id, coordinator=coordinator, limit=0)
+    messages = payload.get("messages") or []
+    question, answer = _last_user_and_assistant(messages)
+    if not answer.strip():
+        return None
+    time_raw = ""
+    for msg in reversed(messages):
+        if str(msg.get("role") or "") == "assistant" and msg.get("timestamp"):
+            time_raw = str(msg.get("timestamp") or "")
+            break
+    time_label = ""
+    try:
+        dt = datetime.fromisoformat(time_raw.replace("Z", "+00:00"))
+        time_label = dt.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        time_label = time_raw
+    text = _markdown_from_turn(session_id, question, answer, time_label)
+    from memory.session_summary import _extract_summary_sections, _parse_summary_markdown
+
+    parsed = _parse_summary_markdown(session_id, text, 0.0)
+    sections = _extract_summary_sections(text)
+    parsed["markdown"] = text
+    parsed["sections"] = sections
+    parsed["question_full"] = sections.get("问题") or question or parsed.get("question")
+    parsed["final_answer"] = sections.get("最终答案") or answer
+    parsed["source"] = "short_term"
+    return parsed
+
+
+def get_session_detail(session_id: str, coordinator: Any = None) -> Optional[Dict[str, Any]]:
     from memory.session_summary import SessionSummaryManager
 
     mgr = SessionSummaryManager()
     text = mgr.read_markdown(session_id)
     if text is None:
-        return None
+        return _detail_from_short_term(session_id, coordinator=coordinator)
     path = mgr._resolve_path(session_id)
     mtime = path.stat().st_mtime if path else 0.0
     from memory.session_summary import _extract_summary_sections, _parse_summary_markdown
@@ -126,6 +189,12 @@ def get_session_detail(session_id: str) -> Optional[Dict[str, Any]]:
     parsed["question_full"] = sections.get("问题") or parsed.get("question")
     parsed["final_answer"] = sections.get("最终答案") or ""
     parsed["source"] = "session_summary"
+    if not (parsed["final_answer"] or "").strip():
+        hydrated = _detail_from_short_term(session_id, coordinator=coordinator)
+        if hydrated and (hydrated.get("final_answer") or "").strip():
+            parsed["final_answer"] = hydrated["final_answer"]
+            parsed.setdefault("sections", {})["最终答案"] = hydrated["final_answer"]
+            parsed["source"] = "session_summary+short_term"
     return parsed
 
 

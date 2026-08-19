@@ -863,11 +863,46 @@ input, textarea { font-family: inherit; color: inherit; }
   margin-bottom: 8px;
 }
 .session-section-body {
-  white-space: pre-wrap;
   word-break: break-word;
   font-size: 13.5px;
   line-height: 1.7;
   color: var(--ink);
+}
+.session-markdown .md-p {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 8px;
+}
+.session-markdown .md-pre {
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12.5px;
+  margin: 8px 0 12px;
+}
+.session-markdown .md-hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 12px 0;
+}
+.session-markdown .md-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0 12px;
+}
+.session-markdown table.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.session-markdown table.md-table th,
+.session-markdown table.md-table td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.session-markdown table.md-table th {
+  background: var(--sage-light);
+  font-weight: 600;
 }
 .section-toggle {
   margin-top: 8px;

@@ -146,6 +146,7 @@ class SwarmCoordinator:
         # Step 2: 根据任务数量路由
         final_answer = None
         mode = None
+        routed_agent_id = "consultation_agent"
 
         if len(subtasks) == 1:
             # 单任务 → 直接调用对应 Agent
@@ -160,6 +161,7 @@ class SwarmCoordinator:
 
             logger.info(f"Route: Single Agent ({agent_id})")
             mode = "single_agent"
+            routed_agent_id = getattr(agent, "agent_id", None) or agent_id or "consultation_agent"
             result = await agent.process({
                 'question': question,
                 'context': enhanced_context,
@@ -212,6 +214,7 @@ class SwarmCoordinator:
                 'session_id': session_id
             })
             final_answer = result.get('answer', '')
+            routed_agent_id = getattr(self.consultation_agent, "agent_id", "consultation_agent")
             result.update({
                 'swarm_enabled': False,
                 'session_id': session_id
@@ -221,6 +224,20 @@ class SwarmCoordinator:
         end_time = datetime.now()
 
         # 注意：短期记忆已经在 Agent Loop 中保存了，这里不需要重复保存
+
+        try:
+            summary = SessionSummary.from_single_agent(
+                session_id=session_id,
+                question=question,
+                final_answer=final_answer or "",
+                agent_id=str(result.get("agent_id") or routed_agent_id),
+                start_time=start_time,
+                end_time=end_time,
+                mode=mode or "single_agent",
+            )
+            self.session_manager.save_summary(summary)
+        except Exception as e:
+            logger.error(f"Failed to generate session summary: {e}")
 
         # 保存到长期记忆
         try:
